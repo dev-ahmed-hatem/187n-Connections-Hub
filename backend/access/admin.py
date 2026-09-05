@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AuditLog, Consumer, Grant
+from .models import AuditLog, Consumer, Grant, GrantRequest
 
 
 @admin.register(Consumer)
@@ -13,6 +13,12 @@ class ConsumerAdmin(admin.ModelAdmin):
 class GrantAdmin(admin.ModelAdmin):
     list_display = ('consumer', 'client_org', 'provider', 'active', 'created_at')
     list_filter = ('active', 'provider')
+
+
+@admin.register(GrantRequest)
+class GrantRequestAdmin(admin.ModelAdmin):
+    list_display = ('consumer', 'client_org', 'provider', 'status', 'requested_by', 'created_at')
+    list_filter = ('status', 'provider')
 
 
 @admin.register(AuditLog)

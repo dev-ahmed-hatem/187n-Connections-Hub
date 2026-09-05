@@ -5,6 +5,7 @@ from .views import (
     ConnectionListView,
     ConnectionOverviewView,
     ConnectionStartView,
+    ConnectionTestView,
 )
 
 app_name = 'connections'
@@ -14,4 +15,5 @@ urlpatterns = [
     path('overview/', ConnectionOverviewView.as_view(), name='overview'),
     path('start/', ConnectionStartView.as_view(), name='start'),
     path('callback', ConnectionCallbackView.as_view(), name='callback'),
+    path('<int:pk>/test', ConnectionTestView.as_view(), name='test'),
 ]

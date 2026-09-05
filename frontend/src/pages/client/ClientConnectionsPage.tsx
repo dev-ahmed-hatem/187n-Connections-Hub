@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
-import { App, Col, Input, Modal, Row, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, App, Col, Input, Modal, Row, Space, Spin, Tag, Typography } from 'antd'
 import { useSearchParams } from 'react-router-dom'
 
-import { useOverviewQuery, useStartConnectionMutation } from '@/app/api/endpoints/connections'
+import {
+  useOverviewQuery,
+  useStartConnectionMutation,
+  useTestConnectionMutation,
+} from '@/app/api/endpoints/connections'
 import ConnectionStatusCard from '@/components/ConnectionStatusCard'
 
 const { Title, Text } = Typography
@@ -10,6 +14,7 @@ const { Title, Text } = Typography
 export default function ClientConnectionsPage() {
   const { data, isLoading, refetch } = useOverviewQuery()
   const [startConnection, { isLoading: starting }] = useStartConnectionMutation()
+  const [testConnection, { isLoading: testing }] = useTestConnectionMutation()
   const [params, setParams] = useSearchParams()
   const { message } = App.useApp()
   const [shopModalOpen, setShopModalOpen] = useState(false)
@@ -46,6 +51,13 @@ export default function ClientConnectionsPage() {
     connect('shopify', { shop: shop.trim() })
   }
 
+  const onTest = async (connectionId: number) => {
+    const res = await testConnection(connectionId).unwrap()
+    res.ok ? message.success('Connection is healthy.') : message.warning('This connection needs reconnecting.')
+  }
+
+  const needsReconnect = (data?.items ?? []).filter((i) => i.status === 'needs_reconnect')
+
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
@@ -54,6 +66,15 @@ export default function ClientConnectionsPage() {
           Connect each platform once. We keep the connection alive so your operators can use it.
         </Text>
       </div>
+
+      {needsReconnect.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message="Some connections need reconnecting"
+          description={`Please reconnect: ${needsReconnect.map((i) => i.provider.name).join(', ')}.`}
+        />
+      )}
 
       <Space size="large" wrap>
         <span><Tag color="green">Connected</Tag> ready to use</span>
@@ -70,8 +91,10 @@ export default function ClientConnectionsPage() {
               <ConnectionStatusCard
                 item={item}
                 loading={starting}
+                testing={testing}
                 onConnect={connect}
                 onReconnect={connect}
+                onTest={onTest}
               />
             </Col>
           ))}

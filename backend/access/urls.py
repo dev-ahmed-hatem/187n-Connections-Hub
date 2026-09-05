@@ -8,6 +8,7 @@ from .views import (
     AccessTokenView,
     AuditLogListView,
     ConsumerViewSet,
+    GrantRequestViewSet,
     GrantViewSet,
 )
 
@@ -16,6 +17,7 @@ app_name = 'access'
 router = DefaultRouter()
 router.register('consumers', ConsumerViewSet, basename='consumer')
 router.register('grants', GrantViewSet, basename='grant')
+router.register('grant-requests', GrantRequestViewSet, basename='grantrequest')
 
 urlpatterns = [
     path('audit/', AuditLogListView.as_view(), name='audit'),

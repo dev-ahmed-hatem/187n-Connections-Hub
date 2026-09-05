@@ -12,13 +12,22 @@ def actor_info(request):
     return 'user', getattr(user, 'username', 'unknown'), None
 
 
-def has_access(request, org, provider) -> bool:
-    """Consumers need an active grant; internal humans (dev/admin) are allowed."""
+def has_access(request, org, provider, scope=None) -> bool:
+    """Consumers need an active grant covering `scope`; internal humans (dev/admin) pass.
+
+    A grant with empty `scopes` means full access (backward compatible with
+    seeded grants). Otherwise the requested `scope` must be listed.
+    """
     _, _, consumer = actor_info(request)
     if consumer is not None:
-        return Grant.objects.filter(
+        grant = Grant.objects.filter(
             consumer=consumer, client_org=org, provider=provider, active=True
-        ).exists()
+        ).first()
+        if grant is None:
+            return False
+        if scope and grant.scopes:
+            return scope in grant.scopes
+        return True
     user = request.user
     return bool(user and user.is_authenticated and (user.is_developer_role or user.is_admin_role))
 

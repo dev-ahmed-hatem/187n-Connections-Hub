@@ -5,3 +5,4 @@ django-cors-headers==4.7.0
 cryptography==44.0.0
 python-dotenv==1.0.1
 requests==2.32.3
+drf-spectacular==0.28.0

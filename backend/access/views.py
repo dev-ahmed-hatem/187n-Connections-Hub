@@ -2,9 +2,11 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, permissions, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from authentication.pagination import CustomPageNumberPagination
 from authentication.permissions import IsAdminRole, IsDeveloperRole
 from connections.models import Connection
 from connections.services import get_valid_access_token
@@ -12,9 +14,15 @@ from providers.adapters import get_adapter
 from providers.models import Provider
 from users.models import ClientOrg
 
-from .models import AuditLog, Consumer, Grant
-from .serializers import AuditLogSerializer, ConsumerSerializer, GrantSerializer
+from .models import AuditLog, Consumer, Grant, GrantRequest
+from .serializers import (
+    AuditLogSerializer,
+    ConsumerSerializer,
+    GrantRequestSerializer,
+    GrantSerializer,
+)
 from .services import actor_info, has_access, write_audit
+from .throttling import ConsumerRateThrottle
 
 
 class ConsumerViewSet(viewsets.ModelViewSet):
@@ -42,6 +50,39 @@ class ConsumerViewSet(viewsets.ModelViewSet):
         data['api_key'] = raw_key  # shown once
         return Response(data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['post'], url_path='rotate-key')
+    def rotate_key(self, request, pk=None):
+        consumer = self.get_object()
+        raw_key = consumer.rotate_key()
+        data = ConsumerSerializer(consumer).data
+        data['api_key'] = raw_key  # shown once; old key now invalid
+        return Response(data)
+
+    @action(detail=True, methods=['get'])
+    def access(self, request, pk=None):
+        """This project's granted clients/platforms, each with live connection status."""
+        consumer = self.get_object()
+        grants = Grant.objects.filter(consumer=consumer, active=True).select_related(
+            'client_org', 'provider')
+        conns = {
+            (c.client_org_id, c.provider_id): c
+            for c in Connection.objects.filter(
+                client_org__in=[g.client_org_id for g in grants]).select_related('provider')
+        }
+        items = []
+        for g in grants:
+            conn = conns.get((g.client_org_id, g.provider_id))
+            items.append({
+                'grant_id': g.id,
+                'client_org': g.client_org_id,
+                'client_org_name': g.client_org.name,
+                'provider': g.provider.slug,
+                'provider_name': g.provider.name,
+                'scopes': g.scopes,
+                'connection_status': conn.status if conn else 'not_connected',
+            })
+        return Response({'consumer': consumer.id, 'consumer_name': consumer.name, 'access': items})
+
 
 class GrantViewSet(viewsets.ModelViewSet):
     """The access gate. Only admins create/revoke grants; devs may read theirs."""
@@ -56,6 +97,9 @@ class GrantViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = Grant.objects.select_related('consumer', 'client_org', 'provider')
+        consumer_id = self.request.query_params.get('consumer')
+        if consumer_id:
+            qs = qs.filter(consumer_id=consumer_id)
         if user.is_admin_role:
             return qs
         return qs.filter(consumer__owner=user)
@@ -64,15 +108,73 @@ class GrantViewSet(viewsets.ModelViewSet):
         serializer.save(granted_by=self.request.user)
 
 
-class AuditLogListView(generics.ListAPIView):
-    serializer_class = AuditLogSerializer
+class GrantRequestViewSet(viewsets.ModelViewSet):
+    """Self-serve access requests. Developers create/list their own; admins
+    approve (which creates the Grant) or deny."""
+
+    serializer_class = GrantRequestSerializer
     permission_classes = [IsDeveloperRole]
 
     def get_queryset(self):
+        user = self.request.user
+        qs = GrantRequest.objects.select_related(
+            'consumer', 'client_org', 'provider', 'requested_by'
+        )
+        if user.is_admin_role:
+            return qs
+        return qs.filter(consumer__owner=user)
+
+    def perform_create(self, serializer):
+        consumer = serializer.validated_data['consumer']
+        user = self.request.user
+        if not user.is_admin_role and consumer.owner_id != user.id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('You can only request access for your own projects.')
+        serializer.save(requested_by=user, status=GrantRequest.Status.PENDING)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminRole])
+    def approve(self, request, pk=None):
+        gr = self.get_object()
+        if gr.status != GrantRequest.Status.PENDING:
+            return Response({'detail': 'This request was already decided.'}, status=400)
+        Grant.objects.update_or_create(
+            consumer=gr.consumer, client_org=gr.client_org, provider=gr.provider,
+            defaults={'active': True, 'scopes': gr.scopes or [], 'granted_by': request.user},
+        )
+        gr.status = GrantRequest.Status.APPROVED
+        gr.decided_by = request.user
+        gr.decided_at = timezone.now()
+        gr.save(update_fields=['status', 'decided_by', 'decided_at'])
+        return Response(GrantRequestSerializer(gr).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminRole])
+    def deny(self, request, pk=None):
+        gr = self.get_object()
+        if gr.status != GrantRequest.Status.PENDING:
+            return Response({'detail': 'This request was already decided.'}, status=400)
+        gr.status = GrantRequest.Status.DENIED
+        gr.decided_by = request.user
+        gr.decided_at = timezone.now()
+        gr.save(update_fields=['status', 'decided_by', 'decided_at'])
+        return Response(GrantRequestSerializer(gr).data)
+
+
+class AuditLogListView(generics.ListAPIView):
+    serializer_class = AuditLogSerializer
+    permission_classes = [IsDeveloperRole]
+    pagination_class = CustomPageNumberPagination
+
+    def get_queryset(self):
         qs = AuditLog.objects.select_related('client_org', 'provider')
-        client_org = self.request.query_params.get('client_org')
-        if client_org:
-            qs = qs.filter(client_org_id=client_org)
+        p = self.request.query_params
+        if p.get('client_org'):
+            qs = qs.filter(client_org_id=p['client_org'])
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        if p.get('action'):
+            qs = qs.filter(action=p['action'])
+        if p.get('actor'):
+            qs = qs.filter(actor_label__icontains=p['actor'])
         return qs
 
 
@@ -116,11 +218,14 @@ class AccessConnectionsView(_AccessBase):
 class AccessDataView(_AccessBase):
     """Data-proxy: the hub calls the provider and returns clean data."""
 
+    throttle_classes = [ConsumerRateThrottle]
+
     def get(self, request, org_id, provider_slug):
         org, provider = self.get_targets(org_id, provider_slug)
-        if not has_access(request, org, provider):
+        if not has_access(request, org, provider, scope='read'):
             write_audit(request, 'data', org, provider, status='denied')
-            return Response({'detail': 'No active grant for this client/provider.'}, status=403)
+            return Response({'detail': 'No active grant (read) for this client/provider.'},
+                            status=403)
 
         connection = self.get_connection(org, provider)
         if not connection or connection.status != Connection.Status.CONNECTED:
@@ -142,11 +247,14 @@ class AccessDataView(_AccessBase):
 class AccessTokenView(_AccessBase):
     """Token-broker: return a short-lived access token for direct provider calls."""
 
+    throttle_classes = [ConsumerRateThrottle]
+
     def post(self, request, org_id, provider_slug):
         org, provider = self.get_targets(org_id, provider_slug)
-        if not has_access(request, org, provider):
+        if not has_access(request, org, provider, scope='token'):
             write_audit(request, 'token', org, provider, status='denied')
-            return Response({'detail': 'No active grant for this client/provider.'}, status=403)
+            return Response({'detail': 'No active grant (token) for this client/provider.'},
+                            status=403)
 
         connection = self.get_connection(org, provider)
         if not connection or connection.status != Connection.Status.CONNECTED:

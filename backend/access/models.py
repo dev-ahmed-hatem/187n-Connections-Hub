@@ -40,6 +40,14 @@ class Consumer(models.Model):
         )
         return consumer, raw
 
+    def rotate_key(self):
+        """Generate a new key, invalidating the old one. Returns the raw key once."""
+        raw = generate_api_key()
+        self.api_key_hash = hash_api_key(raw)
+        self.api_key_prefix = raw[:12]
+        self.save(update_fields=['api_key_hash', 'api_key_prefix'])
+        return raw
+
     def __str__(self):
         return f'{self.name} ({self.api_key_prefix}…)'
 
@@ -70,6 +78,48 @@ class Grant(models.Model):
 
     def __str__(self):
         return f'{self.consumer} → {self.client_org}/{self.provider}'
+
+
+class GrantRequest(models.Model):
+    """A developer's self-serve request for a grant; an admin approves or denies.
+
+    Approving creates the corresponding Grant. Keeps onboarding self-serve while
+    the grant itself remains the admin-gated access decision.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        APPROVED = 'approved', 'Approved'
+        DENIED = 'denied', 'Denied'
+
+    consumer = models.ForeignKey(
+        Consumer, on_delete=models.CASCADE, related_name='grant_requests'
+    )
+    client_org = models.ForeignKey(
+        'users.ClientOrg', on_delete=models.CASCADE, related_name='grant_requests'
+    )
+    provider = models.ForeignKey(
+        'providers.Provider', on_delete=models.CASCADE, related_name='grant_requests'
+    )
+    scopes = models.JSONField(default=list, blank=True)
+    message = models.TextField(blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='grant_requests',
+    )
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='grant_decisions',
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.consumer} → {self.client_org}/{self.provider} [{self.status}]'
 
 
 class AuditLog(models.Model):

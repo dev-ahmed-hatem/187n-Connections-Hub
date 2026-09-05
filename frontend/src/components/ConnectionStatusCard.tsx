@@ -16,12 +16,16 @@ export default function ConnectionStatusCard({
   item,
   onConnect,
   onReconnect,
+  onTest,
   loading,
+  testing,
 }: {
   item: OverviewItem
   onConnect?: (slug: string) => void
   onReconnect?: (slug: string) => void
+  onTest?: (connectionId: number) => void
   loading?: boolean
+  testing?: boolean
 }) {
   const s = STATUS[item.status] ?? STATUS.not_connected
   const p = item.provider
@@ -53,8 +57,14 @@ export default function ConnectionStatusCard({
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <Tag color={s.color}>{s.label}</Tag>
+        <div style={{ display: 'flex', gap: 8 }}>
+        {isConnected && onTest && item.connection_id && (
+          <Button size="small" loading={testing} onClick={() => onTest(item.connection_id!)}>
+            Test
+          </Button>
+        )}
         {onConnect &&
           (isConnected ? (
             onReconnect && (
@@ -76,6 +86,7 @@ export default function ConnectionStatusCard({
               {item.status === 'needs_reconnect' ? 'Reconnect' : 'Connect'}
             </Button>
           ))}
+        </div>
       </div>
     </Card>
   )

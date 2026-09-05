@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import AuditLog, Consumer, Grant
+from .models import AuditLog, Consumer, Grant, GrantRequest
 
 
 class ConsumerSerializer(serializers.ModelSerializer):
@@ -29,6 +29,24 @@ class GrantSerializer(serializers.ModelSerializer):
             'granted_by', 'created_at',
         ]
         read_only_fields = ['granted_by', 'created_at']
+
+
+class GrantRequestSerializer(serializers.ModelSerializer):
+    consumer_name = serializers.CharField(source='consumer.name', read_only=True)
+    client_org_name = serializers.CharField(source='client_org.name', read_only=True)
+    provider_name = serializers.CharField(source='provider.name', read_only=True)
+    provider_slug = serializers.CharField(source='provider.slug', read_only=True)
+    requested_by_username = serializers.CharField(source='requested_by.username', read_only=True)
+
+    class Meta:
+        model = GrantRequest
+        fields = [
+            'id', 'consumer', 'consumer_name', 'client_org', 'client_org_name',
+            'provider', 'provider_name', 'provider_slug', 'scopes', 'message',
+            'status', 'requested_by', 'requested_by_username',
+            'decided_by', 'decided_at', 'created_at',
+        ]
+        read_only_fields = ['status', 'requested_by', 'decided_by', 'decided_at', 'created_at']
 
 
 class AuditLogSerializer(serializers.ModelSerializer):

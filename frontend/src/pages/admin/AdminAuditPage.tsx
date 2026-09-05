@@ -1,5 +1,5 @@
-import { Card, Space, Tag, Typography } from 'antd'
-import { Table } from 'antd'
+import { useState } from 'react'
+import { Card, Select, Space, Table, Tag, Typography } from 'antd'
 
 import { useAuditQuery } from '@/app/api/endpoints/access'
 import type { AuditLog } from '@/types'
@@ -13,7 +13,10 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 export default function AdminAuditPage() {
-  const { data: logs } = useAuditQuery()
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(15)
+  const [status, setStatus] = useState<string | undefined>()
+  const { data, isFetching } = useAuditQuery({ page, page_size: pageSize, status })
 
   const columns = [
     {
@@ -23,10 +26,7 @@ export default function AdminAuditPage() {
     {
       title: 'Actor', key: 'actor',
       render: (_: unknown, a: AuditLog) => (
-        <Space>
-          <Tag>{a.actor_type}</Tag>
-          <Text>{a.actor_label}</Text>
-        </Space>
+        <Space><Tag>{a.actor_type}</Tag><Text>{a.actor_label}</Text></Space>
       ),
     },
     { title: 'Action', dataIndex: 'action', key: 'action' },
@@ -46,8 +46,32 @@ export default function AdminAuditPage() {
         <Title level={3} style={{ marginBottom: 4 }}>Audit log</Title>
         <Text type="secondary">Every access-API call, including denied attempts.</Text>
       </div>
+      <Space>
+        <Select
+          allowClear placeholder="Filter by result" style={{ minWidth: 180 }}
+          value={status}
+          onChange={(v) => { setStatus(v); setPage(1) }}
+          options={[
+            { value: 'ok', label: 'OK' },
+            { value: 'denied', label: 'Denied' },
+            { value: 'error', label: 'Error' },
+          ]}
+        />
+      </Space>
       <Card>
-        <Table rowKey="id" dataSource={logs} columns={columns} pagination={{ pageSize: 15 }} />
+        <Table
+          rowKey="id"
+          loading={isFetching}
+          dataSource={data?.results}
+          columns={columns}
+          pagination={{
+            current: page,
+            pageSize,
+            total: data?.count ?? 0,
+            showSizeChanger: true,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps) },
+          }}
+        />
       </Card>
     </Space>
   )

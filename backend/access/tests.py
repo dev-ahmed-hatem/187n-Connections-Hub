@@ -62,3 +62,67 @@ class AccessApiTests(APITestCase):
         body = res.json()
         self.assertIn('access_token', body)
         self.assertNotIn('refresh_token', body)  # never exposed
+
+    def test_scopes_enforced(self):
+        # read-only grant: data allowed, token denied
+        grant = Grant.objects.create(
+            consumer=self.consumer, client_org=self.org, provider=self.provider,
+            scopes=['read'])
+        self._auth()
+        self.assertEqual(self.client.get(self.data_url()).status_code, 200)
+        self.assertEqual(
+            self.client.post(f'/api/access/clients/{self.org.id}/google-ads/token').status_code,
+            403)
+        # empty scopes = full access
+        grant.scopes = []
+        grant.save()
+        self.assertEqual(
+            self.client.post(f'/api/access/clients/{self.org.id}/google-ads/token').status_code,
+            200)
+
+    def test_key_rotation_invalidates_old_key(self):
+        Grant.objects.create(consumer=self.consumer, client_org=self.org, provider=self.provider)
+        self._auth()
+        self.assertEqual(self.client.get(self.data_url()).status_code, 200)
+        new_key = self.consumer.rotate_key()
+        # old key now rejected
+        self.assertEqual(self.client.get(self.data_url()).status_code, 401)
+        # new key works
+        self.client.credentials(HTTP_AUTHORIZATION=f'ApiKey {new_key}')
+        self.assertEqual(self.client.get(self.data_url()).status_code, 200)
+
+
+class GrantRequestTests(APITestCase):
+    def setUp(self):
+        self.org = ClientOrg.objects.create(name='Acme', slug='acme')
+        self.provider = Provider.objects.create(slug='shopify', name='Shopify', is_mock=True)
+        self.admin = User.objects.create_user(username='admin', password='x',
+                                               role=User.Role.ADMIN, is_staff=True)
+        self.dev = User.objects.create_user(username='dev', password='x',
+                                            role=User.Role.DEVELOPER)
+        self.consumer, _ = Consumer.create_with_key('proj', self.dev)
+
+    def test_dev_request_then_admin_approve_creates_grant(self):
+        from .models import GrantRequest
+        self.client.force_authenticate(self.dev)
+        res = self.client.post('/api/access/grant-requests/', {
+            'consumer': self.consumer.id, 'client_org': self.org.id,
+            'provider': self.provider.id, 'scopes': ['read']}, format='json')
+        self.assertEqual(res.status_code, 201)
+        req_id = res.json()['id']
+
+        self.client.force_authenticate(self.admin)
+        approve = self.client.post(f'/api/access/grant-requests/{req_id}/approve/')
+        self.assertEqual(approve.status_code, 200)
+        self.assertTrue(Grant.objects.filter(
+            consumer=self.consumer, client_org=self.org, provider=self.provider,
+            active=True).exists())
+        self.assertEqual(GrantRequest.objects.get(id=req_id).status, 'approved')
+
+    def test_dev_cannot_approve(self):
+        from .models import GrantRequest
+        gr = GrantRequest.objects.create(consumer=self.consumer, client_org=self.org,
+                                         provider=self.provider, requested_by=self.dev)
+        self.client.force_authenticate(self.dev)
+        res = self.client.post(f'/api/access/grant-requests/{gr.id}/approve/')
+        self.assertEqual(res.status_code, 403)

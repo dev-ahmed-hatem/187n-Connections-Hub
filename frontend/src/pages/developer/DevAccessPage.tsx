@@ -12,7 +12,7 @@ import {
 } from 'antd'
 
 import { useOrgsQuery } from '@/app/api/endpoints/catalog'
-import { useOverviewQuery } from '@/app/api/endpoints/connections'
+import { useOverviewQuery, useTestConnectionMutation } from '@/app/api/endpoints/connections'
 import {
   useFetchTokenMutation,
   usePreviewDataMutation,
@@ -35,6 +35,7 @@ export default function DevAccessPage() {
   const [previewData, { isLoading: previewing }] = usePreviewDataMutation()
   const [fetchToken, { isLoading: tokening }] = useFetchTokenMutation()
   const [requestConnection] = useRequestConnectionMutation()
+  const [testConnection, { isLoading: testing }] = useTestConnectionMutation()
   const { message } = App.useApp()
 
   const [result, setResult] = useState<{ title: string; body: unknown } | null>(null)
@@ -58,6 +59,10 @@ export default function DevAccessPage() {
   const onRequest = async (provider: string) => {
     await requestConnection({ orgId: orgId!, provider, message: 'Please connect this platform.' })
     message.success('Connection request sent to the client.')
+  }
+  const onTest = async (connectionId: number) => {
+    const res = await testConnection(connectionId).unwrap()
+    res.ok ? message.success('Connection is healthy.') : message.warning('Connection needs reconnect.')
   }
 
   const columns = [
@@ -98,6 +103,11 @@ export default function DevAccessPage() {
             <Button size="small" loading={tokening} onClick={() => onToken(item.provider.slug)}>
               Fetch token
             </Button>
+            {item.connection_id && (
+              <Button size="small" loading={testing} onClick={() => onTest(item.connection_id!)}>
+                Test
+              </Button>
+            )}
           </Space>
         ) : (
           <Button size="small" type="primary" ghost onClick={() => onRequest(item.provider.slug)}>

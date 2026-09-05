@@ -1,17 +1,19 @@
 from django.conf import settings
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from providers.adapters import get_adapter
 from providers.models import Provider
 from providers.serializers import ProviderSerializer
 from users.models import ClientOrg
 
 from .models import Connection
 from .serializers import ConnectionSerializer
-from .services import complete_connection, start_connection
+from .services import complete_connection, get_valid_access_token, start_connection
 
 
 def resolve_client_org(request):
@@ -103,6 +105,32 @@ class ConnectionCallbackView(APIView):
         return HttpResponseRedirect(
             f'{frontend}/client/connections?connected={connection.provider.slug}'
         )
+
+
+class ConnectionTestView(APIView):
+    """Verify a connection by exercising the adapter; update status accordingly."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        conn = get_object_or_404(Connection.objects.select_related('provider'), id=pk)
+        user = request.user
+        if user.is_client_role and conn.client_org_id != user.client_org_id:
+            return Response({'detail': 'Not allowed.'}, status=403)
+        try:
+            token = get_valid_access_token(conn)
+            adapter = get_adapter(conn.provider)
+            meta = dict(conn.meta or {})
+            meta['external_account_id'] = conn.external_account_id
+            adapter.fetch_data(token, 'stats', {}, meta)
+            conn.status = Connection.Status.CONNECTED
+            ok = True
+        except Exception:
+            conn.status = Connection.Status.NEEDS_RECONNECT
+            ok = False
+        conn.last_checked = timezone.now()
+        conn.save(update_fields=['status', 'last_checked', 'updated_at'])
+        return Response({'ok': ok, 'status': conn.status})
 
 
 class ConnectionListView(generics.ListAPIView):

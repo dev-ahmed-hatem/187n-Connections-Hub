@@ -1,5 +1,15 @@
 export type Role = 'admin' | 'developer' | 'client'
 
+export interface Paginated<T> {
+  count: number
+  page: number
+  page_size: number
+  total_pages: number
+  next: string | null
+  previous: string | null
+  results: T[]
+}
+
 export type ConnectionStatus =
   | 'connected'
   | 'needs_reconnect'
@@ -115,6 +125,45 @@ export interface ConnectionRequest {
   status: 'pending' | 'connected' | 'declined'
   created_at: string
   resolved_at: string | null
+}
+
+export interface GrantRequest {
+  id: number
+  consumer: number
+  consumer_name: string
+  client_org: number
+  client_org_name: string
+  provider: number
+  provider_name: string
+  provider_slug: string
+  scopes: string[]
+  message: string
+  status: 'pending' | 'approved' | 'denied'
+  requested_by: number | null
+  requested_by_username?: string
+  decided_at: string | null
+  created_at: string
+}
+
+export interface ConsumerAccessItem {
+  grant_id: number
+  client_org: number
+  client_org_name: string
+  provider: string
+  provider_name: string
+  scopes: string[]
+  connection_status: ConnectionStatus
+}
+
+export interface ConsumerAccess {
+  consumer: number
+  consumer_name: string
+  access: ConsumerAccessItem[]
+}
+
+export interface DashboardSummary {
+  role: Role
+  [key: string]: unknown
 }
 
 export interface AuditLog {

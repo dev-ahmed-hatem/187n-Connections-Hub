@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     # Third party
     'rest_framework',
     'corsheaders',
+    'drf_spectacular',
 
     # Local apps
     'users',
@@ -67,6 +68,7 @@ INSTALLED_APPS = [
     'connections',
     'access',
     'portal',
+    'dashboard',
 ]
 
 MIDDLEWARE = [
@@ -147,6 +149,19 @@ REST_FRAMEWORK = {
     ),
     # List endpoints return plain arrays by default (scaffold-friendly).
     # Opt into pagination per-view with CustomPageNumberPagination when needed.
+    'DEFAULT_THROTTLE_RATES': {
+        'consumer': env('CONSUMER_THROTTLE_RATE', '120/min'),
+    },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Connections Hub API',
+    'DESCRIPTION': 'Connect client accounts once; granted projects fetch data or '
+                   'short-lived tokens. Machine access uses an API key: '
+                   '`Authorization: ApiKey hub_xxx`.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 SIMPLE_JWT = {

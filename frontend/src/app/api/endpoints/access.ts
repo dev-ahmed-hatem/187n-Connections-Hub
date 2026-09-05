@@ -83,18 +83,23 @@ export const accessApi = apiSlice.injectEndpoints({
     // Interactive developer-portal actions:
     previewData: build.mutation<
       Record<string, unknown>,
-      { orgId: number; provider: string }
+      { orgId: number; provider: string; accountId?: string }
     >({
-      query: ({ orgId, provider }) => ({
+      query: ({ orgId, provider, accountId }) => ({
         url: `/access/clients/${orgId}/${provider}/data`,
         method: 'get',
+        params: accountId ? { account_id: accountId } : undefined,
       }),
       invalidatesTags: ['Audit'],
     }),
-    fetchToken: build.mutation<TokenResponse, { orgId: number; provider: string }>({
-      query: ({ orgId, provider }) => ({
+    fetchToken: build.mutation<
+      TokenResponse,
+      { orgId: number; provider: string; accountId?: string }
+    >({
+      query: ({ orgId, provider, accountId }) => ({
         url: `/access/clients/${orgId}/${provider}/token`,
         method: 'post',
+        data: accountId ? { account_id: accountId } : undefined,
       }),
       invalidatesTags: ['Audit'],
     }),

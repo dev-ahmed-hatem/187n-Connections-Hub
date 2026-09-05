@@ -55,6 +55,17 @@ class MetaAdsAdapter(RealAdapter):
             'meta': {'ad_account_id': ad_account_id, 'account_name': account_name},
         }
 
+    def list_accounts(self, access_token, meta):
+        data = self._get(f'{self.graph}/me/adaccounts', params={
+            'fields': 'account_id,name', 'access_token': access_token})
+        out = []
+        for a in data.get('data', []):
+            aid = f'act_{a["account_id"]}'
+            out.append({'external_account_id': aid,
+                        'display_name': a.get('name', 'Meta Ads'),
+                        'meta': {'ad_account_id': aid, 'account_name': a.get('name', 'Meta Ads')}})
+        return out or [{'external_account_id': '', 'display_name': 'Meta Ads', 'meta': {}}]
+
     def refresh(self, refresh_token):
         long = self._get(f'{self.graph}/oauth/access_token', params={
             'grant_type': 'fb_exchange_token',

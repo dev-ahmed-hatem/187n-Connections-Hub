@@ -32,7 +32,9 @@ class Connection(models.Model):
 
     class Meta:
         ordering = ['client_org', 'provider']
-        unique_together = ('client_org', 'provider')
+        # One row per external account, so a client can connect several accounts
+        # on the same provider.
+        unique_together = ('client_org', 'provider', 'external_account_id')
 
     def __str__(self):
         return f'{self.client_org} · {self.provider} [{self.status}]'

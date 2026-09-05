@@ -40,39 +40,48 @@ def complete_connection(state: str, code: str) -> Connection:
     exchange_params = {**(oauth_state.meta or {}), 'redirect_uri': _callback_url()}
     result = adapter.exchange_code(code, state, exchange_params)
 
-    connection, _ = Connection.objects.update_or_create(
-        client_org=oauth_state.client_org,
-        provider=provider,
-        defaults={
-            'external_account_id': result.get('external_account_id', ''),
-            'display_name': result.get('meta', {}).get('account_name', provider.name),
-            'status': Connection.Status.CONNECTED,
-            'meta': result.get('meta', {}),
-            'last_checked': timezone.now(),
-        },
-    )
+    now = timezone.now()
+    expires_at = now + timezone.timedelta(seconds=result.get('expires_in', 3600))
 
-    expires_at = timezone.now() + timezone.timedelta(seconds=result.get('expires_in', 3600))
-    TokenSet.objects.update_or_create(
-        connection=connection,
-        defaults={
-            'enc_refresh_token': result.get('refresh_token', ''),
-            'enc_access_token': result.get('access_token', ''),
-            'access_expires_at': expires_at,
-        },
-    )
+    # One OAuth consent can expose several accounts — create a connection per
+    # account, each with its own TokenSet (the shared grant token is copied on).
+    enum_meta = {**result.get('meta', {}),
+                 'external_account_id': result.get('external_account_id', '')}
+    accounts = adapter.list_accounts(result.get('access_token', ''), enum_meta)
+    connections = []
+    for acct in accounts:
+        connection, _ = Connection.objects.update_or_create(
+            client_org=oauth_state.client_org,
+            provider=provider,
+            external_account_id=acct.get('external_account_id', ''),
+            defaults={
+                'display_name': acct.get('display_name') or provider.name,
+                'status': Connection.Status.CONNECTED,
+                'meta': acct.get('meta', {}),
+                'last_checked': now,
+            },
+        )
+        TokenSet.objects.update_or_create(
+            connection=connection,
+            defaults={
+                'enc_refresh_token': result.get('refresh_token', ''),
+                'enc_access_token': result.get('access_token', ''),
+                'access_expires_at': expires_at,
+            },
+        )
+        connections.append(connection)
 
     oauth_state.delete()
 
     # Resolve any pending connection requests for this org+provider.
     from portal.models import ConnectionRequest
     ConnectionRequest.objects.filter(
-        client_org=connection.client_org,
+        client_org=oauth_state.client_org,
         provider=provider,
         status=ConnectionRequest.Status.PENDING,
-    ).update(status=ConnectionRequest.Status.CONNECTED, resolved_at=timezone.now())
+    ).update(status=ConnectionRequest.Status.CONNECTED, resolved_at=now)
 
-    return connection
+    return connections[0] if connections else None
 
 
 def get_valid_access_token(connection: Connection) -> str:

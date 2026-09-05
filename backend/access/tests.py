@@ -92,6 +92,40 @@ class AccessApiTests(APITestCase):
         self.assertEqual(self.client.get(self.data_url()).status_code, 200)
 
 
+class MultiAccountAccessTests(APITestCase):
+    def setUp(self):
+        self.org = ClientOrg.objects.create(name='Acme', slug='acme')
+        self.provider = Provider.objects.create(slug='google-ads', name='Google Ads', is_mock=True)
+        self.dev = User.objects.create_user(username='dev', password='x', role=User.Role.DEVELOPER)
+        self.consumer, self.raw_key = Consumer.create_with_key('proj', self.dev)
+        Grant.objects.create(consumer=self.consumer, client_org=self.org, provider=self.provider)
+        self.accounts = ['1111111111', '2222222222']
+        for acct in self.accounts:
+            conn = Connection.objects.create(
+                client_org=self.org, provider=self.provider, external_account_id=acct,
+                status=Connection.Status.CONNECTED)
+            TokenSet.objects.create(connection=conn, enc_access_token='a',
+                                    access_expires_at=timezone.now() + timezone.timedelta(hours=1))
+        self.client.credentials(HTTP_AUTHORIZATION=f'ApiKey {self.raw_key}')
+
+    def url(self):
+        return f'/api/access/clients/{self.org.id}/google-ads/data'
+
+    def test_ambiguous_without_account_id(self):
+        res = self.client.get(self.url())
+        self.assertEqual(res.status_code, 400)
+        self.assertCountEqual(res.json()['accounts'], self.accounts)
+
+    def test_targeted_account(self):
+        res = self.client.get(self.url(), {'account_id': self.accounts[0]})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['account_id'], self.accounts[0])
+
+    def test_unknown_account(self):
+        res = self.client.get(self.url(), {'account_id': '9999999999'})
+        self.assertEqual(res.status_code, 404)
+
+
 class GrantRequestTests(APITestCase):
     def setUp(self):
         self.org = ClientOrg.objects.create(name='Acme', slug='acme')

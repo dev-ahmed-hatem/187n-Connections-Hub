@@ -40,19 +40,23 @@ export interface Provider {
   is_active: boolean
 }
 
-export interface OverviewItem {
-  provider: Provider
+export interface Account {
+  connection_id: number
+  external_account_id: string
+  display_name: string
   status: ConnectionStatus
-  connection_id: number | null
-  external_account_id: string | null
-  display_name: string | null
   last_checked: string | null
+}
+
+export interface ProviderAccounts {
+  provider: Provider
+  accounts: Account[]
 }
 
 export interface ConnectionOverview {
   client_org: number
   client_org_name: string
-  items: OverviewItem[]
+  items: ProviderAccounts[]
 }
 
 export interface ClientOrg {
@@ -152,6 +156,7 @@ export interface ConsumerAccessItem {
   provider: string
   provider_name: string
   scopes: string[]
+  external_account_id: string | null
   connection_status: ConnectionStatus
 }
 

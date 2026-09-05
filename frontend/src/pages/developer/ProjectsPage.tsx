@@ -202,7 +202,9 @@ function AccessList({ consumerId }: { consumerId: number }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ fontWeight: 600 }}>{a.client_org_name}</div>
-              <Text type="secondary">{a.provider_name}</Text>
+              <Text type="secondary">
+                {a.provider_name}{a.external_account_id ? ` · ${a.external_account_id}` : ''}
+              </Text>
             </div>
             <Tag color={STATUS_COLOR[a.connection_status] ?? 'default'}>
               {a.connection_status.replace('_', ' ')}

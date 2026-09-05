@@ -34,6 +34,20 @@ class ProviderAdapter(abc.ABC):
         }
         """
 
+    def list_accounts(self, access_token: str, meta: dict) -> list:
+        """Return the accounts this grant can access.
+
+        Each item: {external_account_id, display_name, meta}. Default is a single
+        account derived from `meta` (providers with one account per grant, e.g.
+        Shopify). Multi-account providers override this.
+        """
+        meta = meta or {}
+        return [{
+            'external_account_id': meta.get('external_account_id', ''),
+            'display_name': meta.get('account_name', self.provider.name),
+            'meta': meta,
+        }]
+
     @abc.abstractmethod
     def refresh(self, refresh_token: str) -> dict:
         """Return a fresh access token: {'access_token': str, 'expires_in': int}."""

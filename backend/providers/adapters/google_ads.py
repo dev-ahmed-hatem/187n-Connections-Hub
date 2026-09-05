@@ -56,6 +56,28 @@ class GoogleAdsAdapter(RealAdapter):
             },
         }
 
+    def list_accounts(self, access_token, meta):
+        version = self.config.get('api_version', 'v18')
+        data = self._get(
+            f'{API_ROOT}/{version}/customers:listAccessibleCustomers',
+            headers={'Authorization': f'Bearer {access_token}',
+                     'developer-token': self.config['developer_token']},
+        )
+        out = []
+        for name in data.get('resourceNames', []):
+            cid = name.split('/')[-1]
+            out.append({
+                'external_account_id': cid,
+                'display_name': f'Google Ads {cid}',
+                'meta': {'login_customer_id': self.config.get('login_customer_id') or cid,
+                         'account_name': f'Google Ads {cid}'},
+            })
+        if out:
+            return out
+        cid = self.config.get('login_customer_id', '')
+        return [{'external_account_id': cid, 'display_name': f'Google Ads {cid}',
+                 'meta': {'login_customer_id': cid, 'account_name': f'Google Ads {cid}'}}]
+
     def refresh(self, refresh_token):
         tok = self._post(TOKEN_ENDPOINT, data={
             'refresh_token': refresh_token,

@@ -7,7 +7,7 @@ import {
   useStartConnectionMutation,
   useTestConnectionMutation,
 } from '@/app/api/endpoints/connections'
-import ConnectionStatusCard from '@/components/ConnectionStatusCard'
+import ProviderConnectionsCard from '@/components/ProviderConnectionsCard'
 
 const { Title, Text } = Typography
 
@@ -32,7 +32,6 @@ export default function ClientConnectionsPage() {
   }, [params, message, refetch, setParams])
 
   const connect = async (provider: string, providerParams?: Record<string, string>) => {
-    // Shopify needs the store domain before we can build the authorize URL.
     if (provider === 'shopify' && !providerParams?.shop) {
       setShopModalOpen(true)
       return
@@ -53,27 +52,28 @@ export default function ClientConnectionsPage() {
 
   const onTest = async (connectionId: number) => {
     const res = await testConnection(connectionId).unwrap()
-    res.ok ? message.success('Connection is healthy.') : message.warning('This connection needs reconnecting.')
+    res.ok
+      ? message.success('Connection is healthy.')
+      : message.warning('This connection needs reconnecting.')
   }
 
-  const needsReconnect = (data?.items ?? []).filter((i) => i.status === 'needs_reconnect')
+  const needsReconnect = (data?.items ?? [])
+    .flatMap((it) => it.accounts.filter((a) => a.status === 'needs_reconnect').map(() => it.provider.name))
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Title level={3} style={{ marginBottom: 4 }}>Your connections</Title>
         <Text type="secondary">
-          Connect each platform once. We keep the connection alive so your operators can use it.
+          Connect each platform once — you can add several accounts per platform. We keep the
+          connection alive so your operators can use it.
         </Text>
       </div>
 
       {needsReconnect.length > 0 && (
-        <Alert
-          type="warning"
-          showIcon
+        <Alert type="warning" showIcon
           message="Some connections need reconnecting"
-          description={`Please reconnect: ${needsReconnect.map((i) => i.provider.name).join(', ')}.`}
-        />
+          description={`Please reconnect: ${[...new Set(needsReconnect)].join(', ')}.`} />
       )}
 
       <Space size="large" wrap>
@@ -87,10 +87,10 @@ export default function ClientConnectionsPage() {
       ) : (
         <Row gutter={[16, 16]}>
           {data?.items.map((item) => (
-            <Col xs={24} sm={12} lg={8} key={item.provider.id}>
-              <ConnectionStatusCard
+            <Col xs={24} md={12} key={item.provider.id}>
+              <ProviderConnectionsCard
                 item={item}
-                loading={starting}
+                connecting={starting}
                 testing={testing}
                 onConnect={connect}
                 onReconnect={connect}
@@ -101,23 +101,13 @@ export default function ClientConnectionsPage() {
         </Row>
       )}
 
-      <Modal
-        title="Connect Shopify"
-        open={shopModalOpen}
-        onCancel={() => setShopModalOpen(false)}
-        onOk={confirmShop}
-        okText="Continue"
-      >
+      <Modal title="Connect Shopify" open={shopModalOpen}
+        onCancel={() => setShopModalOpen(false)} onOk={confirmShop} okText="Continue">
         <Typography.Paragraph type="secondary">
           Enter your store domain to continue to Shopify's consent screen.
         </Typography.Paragraph>
-        <Input
-          placeholder="your-store.myshopify.com"
-          value={shop}
-          onChange={(e) => setShop(e.target.value)}
-          onPressEnter={confirmShop}
-          autoFocus
-        />
+        <Input placeholder="your-store.myshopify.com" value={shop}
+          onChange={(e) => setShop(e.target.value)} onPressEnter={confirmShop} autoFocus />
       </Modal>
     </Space>
   )

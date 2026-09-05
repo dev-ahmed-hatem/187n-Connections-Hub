@@ -133,20 +133,24 @@ class Command(BaseCommand):
         return user
 
     def _seed_connection(self, org, provider, status):
+        # Mirror the real connect flow: one grant may expose several accounts.
         adapter = get_adapter(provider)
         state = f'seed-{org.slug}-{provider.slug}'
         result = adapter.exchange_code(adapter.make_code(state), state)
-        conn, _ = Connection.objects.update_or_create(
-            client_org=org, provider=provider,
-            defaults={'external_account_id': result['external_account_id'],
-                      'display_name': result['meta'].get('account_name', provider.name),
-                      'status': status, 'meta': result['meta'], 'last_checked': timezone.now()},
-        )
-        TokenSet.objects.update_or_create(
-            connection=conn,
-            defaults={'enc_refresh_token': result['refresh_token'],
-                      'enc_access_token': result['access_token'],
-                      'access_expires_at': timezone.now() + timezone.timedelta(
-                          seconds=result['expires_in'])},
-        )
-        return conn
+        expires_at = timezone.now() + timezone.timedelta(seconds=result['expires_in'])
+        enum_meta = {**result['meta'], 'external_account_id': result.get('external_account_id', '')}
+        accounts = adapter.list_accounts(result['access_token'], enum_meta)
+        for acct in accounts:
+            conn, _ = Connection.objects.update_or_create(
+                client_org=org, provider=provider,
+                external_account_id=acct['external_account_id'],
+                defaults={'display_name': acct.get('display_name') or provider.name,
+                          'status': status, 'meta': acct.get('meta', {}),
+                          'last_checked': timezone.now()},
+            )
+            TokenSet.objects.update_or_create(
+                connection=conn,
+                defaults={'enc_refresh_token': result['refresh_token'],
+                          'enc_access_token': result['access_token'],
+                          'access_expires_at': expires_at},
+            )

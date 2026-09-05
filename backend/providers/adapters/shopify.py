@@ -49,6 +49,11 @@ class ShopifyAdapter(RealAdapter):
             'meta': {'shop': shop, 'account_name': shop, 'scope': data.get('scope', '')},
         }
 
+    def list_accounts(self, access_token, meta):
+        shop = (meta or {}).get('shop') or (meta or {}).get('external_account_id')
+        return [{'external_account_id': shop, 'display_name': shop,
+                 'meta': {'shop': shop, 'account_name': shop}}]
+
     def refresh(self, refresh_token):
         # Offline tokens don't expire; nothing to do.
         return {'access_token': refresh_token, 'expires_in': NON_EXPIRING_SECONDS}

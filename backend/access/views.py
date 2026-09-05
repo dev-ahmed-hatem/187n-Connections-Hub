@@ -64,23 +64,30 @@ class ConsumerViewSet(viewsets.ModelViewSet):
         consumer = self.get_object()
         grants = Grant.objects.filter(consumer=consumer, active=True).select_related(
             'client_org', 'provider')
-        conns = {
-            (c.client_org_id, c.provider_id): c
-            for c in Connection.objects.filter(
-                client_org__in=[g.client_org_id for g in grants]).select_related('provider')
-        }
+        conns = {}
+        for c in Connection.objects.filter(
+            client_org__in=[g.client_org_id for g in grants]
+        ).select_related('provider'):
+            conns.setdefault((c.client_org_id, c.provider_id), []).append(c)
         items = []
         for g in grants:
-            conn = conns.get((g.client_org_id, g.provider_id))
-            items.append({
+            grant_conns = conns.get((g.client_org_id, g.provider_id), [])
+            base = {
                 'grant_id': g.id,
                 'client_org': g.client_org_id,
                 'client_org_name': g.client_org.name,
                 'provider': g.provider.slug,
                 'provider_name': g.provider.name,
                 'scopes': g.scopes,
-                'connection_status': conn.status if conn else 'not_connected',
-            })
+            }
+            if grant_conns:
+                for c in grant_conns:
+                    items.append({**base,
+                                  'external_account_id': c.external_account_id,
+                                  'connection_status': c.status})
+            else:
+                items.append({**base, 'external_account_id': None,
+                              'connection_status': 'not_connected'})
         return Response({'consumer': consumer.id, 'consumer_name': consumer.name, 'access': items})
 
 
@@ -188,29 +195,49 @@ class _AccessBase(APIView):
         provider = get_object_or_404(Provider, slug=provider_slug, is_active=True)
         return org, provider
 
-    def get_connection(self, org, provider):
-        return Connection.objects.filter(
-            client_org=org, provider=provider
-        ).select_related('provider', 'tokens').first()
+    def resolve_connection(self, org, provider, account_id=None):
+        """Return (connection, error_response). Picks the account when there's
+        one; requires account_id when several are connected."""
+        conns = list(Connection.objects.filter(
+            client_org=org, provider=provider, status=Connection.Status.CONNECTED,
+        ).select_related('provider', 'tokens'))
+        if not conns:
+            return None, Response(
+                {'detail': 'Provider is not connected for this client.'}, status=409)
+        if account_id:
+            match = next((c for c in conns if c.external_account_id == account_id), None)
+            if not match:
+                return None, Response(
+                    {'detail': f'No connected account "{account_id}" for this provider.'},
+                    status=404)
+            return match, None
+        if len(conns) == 1:
+            return conns[0], None
+        return None, Response({
+            'detail': 'Multiple accounts connected; specify account_id.',
+            'accounts': [c.external_account_id for c in conns],
+        }, status=400)
 
 
 class AccessConnectionsView(_AccessBase):
-    """List a client's connection statuses (discovery)."""
+    """List a client's connected accounts per provider (discovery)."""
 
     def get(self, request, org_id):
         org = get_object_or_404(ClientOrg, id=org_id)
-        conns = {
-            c.provider_id: c
-            for c in Connection.objects.filter(client_org=org).select_related('provider')
-        }
+        by_provider = {}
+        for c in Connection.objects.filter(client_org=org).select_related('provider'):
+            by_provider.setdefault(c.provider_id, []).append(c)
         items = []
         for provider in Provider.objects.filter(is_active=True):
-            c = conns.get(provider.id)
+            accounts = [{
+                'external_account_id': c.external_account_id,
+                'display_name': c.display_name,
+                'status': c.status,
+            } for c in by_provider.get(provider.id, [])]
             items.append({
                 'provider': provider.slug,
                 'provider_name': provider.name,
-                'status': c.status if c else 'not_connected',
-                'external_account_id': c.external_account_id if c else None,
+                'accounts': accounts,
             })
         return Response({'client_org': org.id, 'connections': items})
 
@@ -227,11 +254,12 @@ class AccessDataView(_AccessBase):
             return Response({'detail': 'No active grant (read) for this client/provider.'},
                             status=403)
 
-        connection = self.get_connection(org, provider)
-        if not connection or connection.status != Connection.Status.CONNECTED:
+        connection, err = self.resolve_connection(
+            org, provider, request.query_params.get('account_id'))
+        if err is not None:
             write_audit(request, 'data', org, provider, status='error',
-                        meta={'reason': 'not_connected'})
-            return Response({'detail': 'Provider is not connected for this client.'}, status=409)
+                        meta={'reason': 'account'})
+            return err
 
         access_token = get_valid_access_token(connection)
         adapter = get_adapter(provider)
@@ -256,11 +284,12 @@ class AccessTokenView(_AccessBase):
             return Response({'detail': 'No active grant (token) for this client/provider.'},
                             status=403)
 
-        connection = self.get_connection(org, provider)
-        if not connection or connection.status != Connection.Status.CONNECTED:
+        connection, err = self.resolve_connection(
+            org, provider, request.data.get('account_id'))
+        if err is not None:
             write_audit(request, 'token', org, provider, status='error',
-                        meta={'reason': 'not_connected'})
-            return Response({'detail': 'Provider is not connected for this client.'}, status=409)
+                        meta={'reason': 'account'})
+            return err
 
         access_token = get_valid_access_token(connection)
         write_audit(request, 'token', org, provider)

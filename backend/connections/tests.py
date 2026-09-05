@@ -57,6 +57,22 @@ class TestConnectionEndpointTests(TestCase):
         self.assertEqual(res.json()['status'], 'connected')
 
 
+class MultiAccountConnectTests(TestCase):
+    def setUp(self):
+        self.org = ClientOrg.objects.create(name='Acme', slug='acme')
+        self.provider = Provider.objects.create(slug='google-ads', name='Google Ads', is_mock=True)
+
+    def test_connect_creates_a_connection_per_account(self):
+        from connections.models import OAuthState
+        from connections.services import complete_connection
+        OAuthState.objects.create(state='s1', client_org=self.org, provider=self.provider)
+        adapter = get_adapter(self.provider)
+        complete_connection('s1', adapter.make_code('s1'))
+        conns = Connection.objects.filter(client_org=self.org, provider=self.provider)
+        self.assertEqual(conns.count(), 2)  # mock google-ads exposes 2 accounts
+        self.assertEqual(len({c.external_account_id for c in conns}), 2)
+
+
 class MockAdapterTests(TestCase):
     def setUp(self):
         self.provider = Provider.objects.create(slug='shopify', name='Shopify', is_mock=True)

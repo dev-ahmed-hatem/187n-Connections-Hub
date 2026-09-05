@@ -46,6 +46,29 @@ class MockAdapter(ProviderAdapter):
             'meta': meta,
         }
 
+    def list_accounts(self, access_token: str, meta: dict) -> list:
+        # Multi-account for ad platforms; single for shopify.
+        if self.provider.slug in ('google-ads', 'meta-ads'):
+            accounts = []
+            for i in (1, 2):
+                d = _digest(self.provider.slug, 'acct', access_token, i)
+                num = str(int(d[:12], 16) % (10 ** 10)).zfill(10)
+                name = f'{self.provider.name} Account {i}'
+                if self.provider.slug == 'google-ads':
+                    accounts.append({'external_account_id': num, 'display_name': name,
+                                     'meta': {'account_name': name, 'login_customer_id': num}})
+                else:
+                    aid = f'act_{num}'
+                    accounts.append({'external_account_id': aid, 'display_name': name,
+                                     'meta': {'account_name': name, 'ad_account_id': aid}})
+            return accounts
+        meta = meta or {}
+        return [{
+            'external_account_id': meta.get('external_account_id', ''),
+            'display_name': meta.get('account_name', self.provider.name),
+            'meta': meta,
+        }]
+
     def refresh(self, refresh_token: str) -> dict:
         d = _digest('refresh', refresh_token)
         return {

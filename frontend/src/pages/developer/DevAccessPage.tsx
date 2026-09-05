@@ -18,7 +18,7 @@ import {
   usePreviewDataMutation,
   useRequestConnectionMutation,
 } from '@/app/api/endpoints/access'
-import type { OverviewItem } from '@/types'
+import type { Account, Provider } from '@/types'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -26,6 +26,11 @@ const STATUS_COLOR: Record<string, string> = {
   connected: 'green',
   needs_reconnect: 'gold',
   not_connected: 'default',
+}
+
+interface Row {
+  provider: Provider
+  account?: Account
 }
 
 export default function DevAccessPage() {
@@ -37,24 +42,19 @@ export default function DevAccessPage() {
   const [requestConnection] = useRequestConnectionMutation()
   const [testConnection, { isLoading: testing }] = useTestConnectionMutation()
   const { message } = App.useApp()
-
   const [result, setResult] = useState<{ title: string; body: unknown } | null>(null)
 
-  const onPreview = async (provider: string) => {
+  const onPreview = async (provider: string, accountId: string) => {
     try {
-      const data = await previewData({ orgId: orgId!, provider }).unwrap()
-      setResult({ title: `Data · ${provider}`, body: data })
-    } catch (e) {
-      message.error(errText(e))
-    }
+      const data = await previewData({ orgId: orgId!, provider, accountId }).unwrap()
+      setResult({ title: `Data · ${provider} · ${accountId}`, body: data })
+    } catch (e) { message.error(errText(e)) }
   }
-  const onToken = async (provider: string) => {
+  const onToken = async (provider: string, accountId: string) => {
     try {
-      const data = await fetchToken({ orgId: orgId!, provider }).unwrap()
-      setResult({ title: `Access token · ${provider}`, body: data })
-    } catch (e) {
-      message.error(errText(e))
-    }
+      const data = await fetchToken({ orgId: orgId!, provider, accountId }).unwrap()
+      setResult({ title: `Token · ${provider} · ${accountId}`, body: data })
+    } catch (e) { message.error(errText(e)) }
   }
   const onRequest = async (provider: string) => {
     await requestConnection({ orgId: orgId!, provider, message: 'Please connect this platform.' })
@@ -65,52 +65,58 @@ export default function DevAccessPage() {
     res.ok ? message.success('Connection is healthy.') : message.warning('Connection needs reconnect.')
   }
 
+  const rows: Row[] = (overview?.items ?? []).flatMap((it) =>
+    it.accounts.length
+      ? it.accounts.map((account) => ({ provider: it.provider, account }))
+      : [{ provider: it.provider }],
+  )
+
   const columns = [
     {
-      title: 'Platform',
-      key: 'provider',
-      render: (_: unknown, item: OverviewItem) => (
+      title: 'Platform', key: 'provider',
+      render: (_: unknown, r: Row) => (
         <Space>
           <span style={{
-            width: 26, height: 26, borderRadius: 7, display: 'inline-grid',
+            width: 26, height: 26, borderRadius: 8, display: 'inline-grid',
             placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 12,
-            background: item.provider.color || '#4f56d6',
-          }}>
-            {item.provider.short_code || item.provider.name[0]}
-          </span>
-          {item.provider.name}
+            background: r.provider.color || '#6c5ce7',
+          }}>{r.provider.short_code || r.provider.name[0]}</span>
+          {r.provider.name}
         </Space>
       ),
     },
     {
-      title: 'Status',
-      key: 'status',
-      render: (_: unknown, item: OverviewItem) => (
-        <Tag color={STATUS_COLOR[item.status] ?? 'default'}>
-          {item.status.replace('_', ' ')}
+      title: 'Account', key: 'account',
+      render: (_: unknown, r: Row) =>
+        r.account ? <Text code>{r.account.external_account_id}</Text> : <Text type="secondary">—</Text>,
+    },
+    {
+      title: 'Status', key: 'status',
+      render: (_: unknown, r: Row) => (
+        <Tag color={STATUS_COLOR[r.account?.status ?? 'not_connected'] ?? 'default'}>
+          {(r.account?.status ?? 'not_connected').replace('_', ' ')}
         </Tag>
       ),
     },
     {
-      title: 'Actions',
-      key: 'actions',
-      render: (_: unknown, item: OverviewItem) =>
-        item.status === 'connected' ? (
+      title: 'Actions', key: 'actions',
+      render: (_: unknown, r: Row) =>
+        r.account && r.account.status === 'connected' ? (
           <Space>
-            <Button size="small" loading={previewing} onClick={() => onPreview(item.provider.slug)}>
+            <Button size="small" loading={previewing}
+              onClick={() => onPreview(r.provider.slug, r.account!.external_account_id)}>
               Preview data
             </Button>
-            <Button size="small" loading={tokening} onClick={() => onToken(item.provider.slug)}>
+            <Button size="small" loading={tokening}
+              onClick={() => onToken(r.provider.slug, r.account!.external_account_id)}>
               Fetch token
             </Button>
-            {item.connection_id && (
-              <Button size="small" loading={testing} onClick={() => onTest(item.connection_id!)}>
-                Test
-              </Button>
-            )}
+            <Button size="small" loading={testing} onClick={() => onTest(r.account!.connection_id)}>
+              Test
+            </Button>
           </Space>
         ) : (
-          <Button size="small" type="primary" ghost onClick={() => onRequest(item.provider.slug)}>
+          <Button size="small" type="primary" ghost onClick={() => onRequest(r.provider.slug)}>
             Request connection
           </Button>
         ),
@@ -122,37 +128,25 @@ export default function DevAccessPage() {
       <div>
         <Title level={3} style={{ marginBottom: 4 }}>Client access</Title>
         <Text type="secondary">
-          Pick a client, then pull data or a short-lived token — no client credentials ever leave the hub.
+          Pick a client, then pull data or a short-lived token for a specific account — no client
+          credentials ever leave the hub.
         </Text>
       </div>
 
-      <Select
-        placeholder="Select a client"
-        style={{ minWidth: 280 }}
-        value={orgId}
-        onChange={setOrgId}
-        options={(orgs ?? []).map((o) => ({ value: o.id, label: o.name }))}
-      />
+      <Select placeholder="Select a client" style={{ minWidth: 280 }} value={orgId}
+        onChange={setOrgId} options={(orgs ?? []).map((o) => ({ value: o.id, label: o.name }))} />
 
       {orgId && (
         <Card loading={isFetching}>
-          <Table
-            rowKey={(r) => r.provider.id}
-            dataSource={overview?.items}
-            columns={columns}
-            pagination={false}
-          />
+          <Table rowKey={(r) => `${r.provider.id}-${r.account?.connection_id ?? 'none'}`}
+            dataSource={rows} columns={columns} pagination={false} />
         </Card>
       )}
 
-      <Drawer
-        title={result?.title}
-        open={!!result}
-        onClose={() => setResult(null)}
-        width={440}
-      >
-        <Paragraph type="secondary">Returned by the hub (mock data / token):</Paragraph>
-        <pre style={{ background: '#f6f6f6', padding: 12, borderRadius: 8, overflow: 'auto' }}>
+      <Drawer title={result?.title} open={!!result} onClose={() => setResult(null)} width={440}>
+        <Paragraph type="secondary">Returned by the hub:</Paragraph>
+        <pre style={{ background: 'rgba(128,128,128,0.12)', padding: 12, borderRadius: 8,
+          overflow: 'auto' }}>
           {JSON.stringify(result?.body, null, 2)}
         </pre>
       </Drawer>

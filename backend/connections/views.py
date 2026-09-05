@@ -37,20 +37,21 @@ class ConnectionOverviewView(APIView):
         if org is None:
             return Response({'detail': 'client_org is required.'}, status=400)
 
-        connections = {
-            c.provider_id: c
-            for c in Connection.objects.filter(client_org=org).select_related('provider')
-        }
+        by_provider = {}
+        for c in Connection.objects.filter(client_org=org).select_related('provider'):
+            by_provider.setdefault(c.provider_id, []).append(c)
         items = []
         for provider in Provider.objects.filter(is_active=True):
-            conn = connections.get(provider.id)
+            accounts = [{
+                'connection_id': c.id,
+                'external_account_id': c.external_account_id,
+                'display_name': c.display_name,
+                'status': c.status,
+                'last_checked': c.last_checked,
+            } for c in by_provider.get(provider.id, [])]
             items.append({
                 'provider': ProviderSerializer(provider).data,
-                'status': conn.status if conn else 'not_connected',
-                'connection_id': conn.id if conn else None,
-                'external_account_id': conn.external_account_id if conn else None,
-                'display_name': conn.display_name if conn else None,
-                'last_checked': conn.last_checked if conn else None,
+                'accounts': accounts,
             })
         return Response({'client_org': org.id, 'client_org_name': org.name, 'items': items})
 

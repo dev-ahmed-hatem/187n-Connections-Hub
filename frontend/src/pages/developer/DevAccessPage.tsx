@@ -13,6 +13,7 @@ import {
 
 import { useOrgsQuery } from '@/app/api/endpoints/catalog'
 import { useOverviewQuery, useTestConnectionMutation } from '@/app/api/endpoints/connections'
+import ProviderIcon from '@/components/ProviderIcon'
 import {
   useFetchTokenMutation,
   usePreviewDataMutation,
@@ -40,9 +41,10 @@ export default function DevAccessPage() {
   const [previewData, { isLoading: previewing }] = usePreviewDataMutation()
   const [fetchToken, { isLoading: tokening }] = useFetchTokenMutation()
   const [requestConnection] = useRequestConnectionMutation()
-  const [testConnection, { isLoading: testing }] = useTestConnectionMutation()
+  const [testConnection] = useTestConnectionMutation()
   const { message } = App.useApp()
   const [result, setResult] = useState<{ title: string; body: unknown } | null>(null)
+  const [testingId, setTestingId] = useState<number | null>(null)
 
   const onPreview = async (provider: string, accountId: string) => {
     try {
@@ -61,8 +63,13 @@ export default function DevAccessPage() {
     message.success('Connection request sent to the client.')
   }
   const onTest = async (connectionId: number) => {
-    const res = await testConnection(connectionId).unwrap()
-    res.ok ? message.success('Connection is healthy.') : message.warning('Connection needs reconnect.')
+    setTestingId(connectionId)
+    try {
+      const res = await testConnection(connectionId).unwrap()
+      res.ok ? message.success('Connection is healthy.') : message.warning('Connection needs reconnect.')
+    } finally {
+      setTestingId(null)
+    }
   }
 
   const rows: Row[] = (overview?.items ?? []).flatMap((it) =>
@@ -75,14 +82,7 @@ export default function DevAccessPage() {
     {
       title: 'Platform', key: 'provider',
       render: (_: unknown, r: Row) => (
-        <Space>
-          <span style={{
-            width: 26, height: 26, borderRadius: 8, display: 'inline-grid',
-            placeItems: 'center', color: '#fff', fontWeight: 700, fontSize: 12,
-            background: r.provider.color || '#6c5ce7',
-          }}>{r.provider.short_code || r.provider.name[0]}</span>
-          {r.provider.name}
-        </Space>
+        <Space><ProviderIcon provider={r.provider} />{r.provider.name}</Space>
       ),
     },
     {
@@ -111,7 +111,10 @@ export default function DevAccessPage() {
               onClick={() => onToken(r.provider.slug, r.account!.external_account_id)}>
               Fetch token
             </Button>
-            <Button size="small" loading={testing} onClick={() => onTest(r.account!.connection_id)}>
+            <Button size="small"
+              loading={testingId === r.account!.connection_id}
+              disabled={testingId != null && testingId !== r.account!.connection_id}
+              onClick={() => onTest(r.account!.connection_id)}>
               Test
             </Button>
           </Space>

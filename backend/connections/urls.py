@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     ConnectionCallbackView,
+    ConnectionDeleteView,
     ConnectionListView,
     ConnectionOverviewView,
     ConnectionStartView,
@@ -16,4 +17,5 @@ urlpatterns = [
     path('start/', ConnectionStartView.as_view(), name='start'),
     path('callback', ConnectionCallbackView.as_view(), name='callback'),
     path('<int:pk>/test', ConnectionTestView.as_view(), name='test'),
+    path('<int:pk>/', ConnectionDeleteView.as_view(), name='delete'),
 ]

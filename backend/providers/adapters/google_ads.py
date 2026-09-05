@@ -11,6 +11,7 @@ from .real_base import RealAdapter
 AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
+USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/userinfo'
 API_ROOT = 'https://googleads.googleapis.com'
 
 STATS_GAQL = (
@@ -20,7 +21,9 @@ STATS_GAQL = (
 
 
 class GoogleAdsAdapter(RealAdapter):
-    required_config = ('client_id', 'client_secret', 'developer_token')
+    # developer_token is only needed for Ads API calls (accounts/data), not for
+    # the OAuth handshake — so it's not required just to connect.
+    required_config = ('client_id', 'client_secret')
 
     def authorize_url(self, state, redirect_uri, params=None):
         query = urlencode({
@@ -44,7 +47,9 @@ class GoogleAdsAdapter(RealAdapter):
             'redirect_uri': redirect_uri,
             'grant_type': 'authorization_code',
         })
-        customer_id = self.config.get('login_customer_id') or self._first_customer(tok['access_token'])
+        customer_id = self.config.get('login_customer_id') or ''
+        if not customer_id and self.config.get('developer_token'):
+            customer_id = self._first_customer(tok['access_token'])
         return {
             'refresh_token': tok.get('refresh_token', ''),
             'access_token': tok['access_token'],
@@ -52,11 +57,25 @@ class GoogleAdsAdapter(RealAdapter):
             'external_account_id': customer_id,
             'meta': {
                 'login_customer_id': self.config.get('login_customer_id') or customer_id,
-                'account_name': f'Google Ads {customer_id}',
+                'account_name': f'Google Ads {customer_id}' if customer_id else 'Google Ads',
             },
         }
 
     def list_accounts(self, access_token, meta):
+        # No developer token yet → OAuth-only: identify the connection by the
+        # user's Google email so the connect flow is fully testable.
+        if not self.config.get('developer_token'):
+            info = {}
+            try:
+                info = self._userinfo(access_token)
+            except Exception:
+                pass
+            email = info.get('email') or 'Google account'
+            return [{
+                'external_account_id': info.get('sub', '') or (meta or {}).get('external_account_id', ''),
+                'display_name': email,
+                'meta': {'account_name': email, 'email': email, 'pending_developer_token': True},
+            }]
         version = self.config.get('api_version', 'v21')
         data = self._get(
             f'{API_ROOT}/{version}/customers:listAccessibleCustomers',
@@ -89,6 +108,16 @@ class GoogleAdsAdapter(RealAdapter):
 
     def fetch_data(self, access_token, resource, params, meta):
         meta = meta or {}
+        if not self.config.get('developer_token'):
+            return {
+                'provider': 'google-ads',
+                'resource': resource or 'stats',
+                'account_id': meta.get('external_account_id'),
+                'metrics': {},
+                'note': 'Connected, but a Google Ads developer token (from a Manager '
+                        'account) is required to pull data.',
+                'mock': False,
+            }
         customer_id = (meta.get('external_account_id') or '').replace('-', '')
         login_customer_id = (meta.get('login_customer_id')
                              or self.config.get('login_customer_id') or customer_id)
@@ -130,6 +159,10 @@ class GoogleAdsAdapter(RealAdapter):
         except Exception:
             pass
         return None
+
+    def _userinfo(self, access_token):
+        return self._get(USERINFO_ENDPOINT,
+                         headers={'Authorization': f'Bearer {access_token}'})
 
     def _first_customer(self, access_token):
         version = self.config.get('api_version', 'v21')

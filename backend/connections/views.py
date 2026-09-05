@@ -134,6 +134,20 @@ class ConnectionTestView(APIView):
         return Response({'ok': ok, 'status': conn.status})
 
 
+class ConnectionDeleteView(generics.DestroyAPIView):
+    """Delete a connected account. Clients may delete their own org's; admins any."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        conn = get_object_or_404(Connection, id=self.kwargs['pk'])
+        user = self.request.user
+        if user.is_client_role and conn.client_org_id != user.client_org_id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Not allowed.')
+        return conn
+
+
 class ConnectionListView(generics.ListAPIView):
     """Raw connection rows for a client org."""
 

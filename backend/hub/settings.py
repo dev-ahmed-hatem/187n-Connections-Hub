@@ -194,7 +194,9 @@ PROVIDER_CONFIG = {
         'developer_token': env('GOOGLE_ADS_DEVELOPER_TOKEN', ''),
         'login_customer_id': env('GOOGLE_ADS_LOGIN_CUSTOMER_ID', ''),
         'api_version': env('GOOGLE_ADS_API_VERSION', 'v21'),
-        'scopes': ['https://www.googleapis.com/auth/adwords'],
+        # openid+email let us identify the connected account during an
+        # OAuth-only test (before a developer token is available).
+        'scopes': ['openid', 'email', 'https://www.googleapis.com/auth/adwords'],
     },
     'meta-ads': {
         'client_id': env('META_APP_ID', ''),

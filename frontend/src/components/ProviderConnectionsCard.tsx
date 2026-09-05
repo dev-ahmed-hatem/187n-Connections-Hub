@@ -1,6 +1,7 @@
-import { Button, Card, Empty, Space, Tag, Typography } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Popconfirm, Space, Tag, Typography } from 'antd'
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 
+import ProviderIcon from '@/components/ProviderIcon'
 import type { Account, ConnectionStatus, ProviderAccounts } from '@/types'
 
 const { Text } = Typography
@@ -16,35 +17,31 @@ const STATUS: Record<ConnectionStatus, { color: string; label: string }> = {
 export default function ProviderConnectionsCard({
   item,
   connecting,
-  testing,
+  testingId,
+  deletingId,
   onConnect,
   onReconnect,
   onTest,
+  onDelete,
 }: {
   item: ProviderAccounts
   connecting?: boolean
-  testing?: boolean
+  testingId?: number | null
+  deletingId?: number | null
   onConnect: (slug: string) => void
   onReconnect: (slug: string) => void
   onTest: (connectionId: number) => void
+  onDelete: (connectionId: number) => void
 }) {
   const p = item.provider
   const hasAccounts = item.accounts.length > 0
+  const aTestRunning = testingId != null
 
   return (
     <Card
       size="small"
       style={{ height: '100%' }}
-      title={
-        <Space>
-          <span style={{
-            width: 26, height: 26, borderRadius: 8, display: 'inline-grid',
-            placeItems: 'center', color: '#fff', fontWeight: 800, fontSize: 12,
-            background: p.color || '#6c5ce7',
-          }}>{p.short_code || p.name[0]}</span>
-          {p.name}
-        </Space>
-      }
+      title={<Space><ProviderIcon provider={p} />{p.name}</Space>}
       extra={
         <Button size="small" type={hasAccounts ? 'default' : 'primary'}
           icon={<PlusOutlined />} loading={connecting} onClick={() => onConnect(p.slug)}>
@@ -70,7 +67,12 @@ export default function ProviderConnectionsCard({
                 <Space size={6}>
                   <Tag color={s.color}>{s.label}</Tag>
                   {a.status === 'connected' && (
-                    <Button size="small" loading={testing} onClick={() => onTest(a.connection_id)}>
+                    <Button
+                      size="small"
+                      loading={testingId === a.connection_id}
+                      disabled={aTestRunning && testingId !== a.connection_id}
+                      onClick={() => onTest(a.connection_id)}
+                    >
                       Test
                     </Button>
                   )}
@@ -80,6 +82,15 @@ export default function ProviderConnectionsCard({
                       Reconnect
                     </Button>
                   )}
+                  <Popconfirm
+                    title="Disconnect this account?"
+                    description="Projects using it will lose access."
+                    okText="Disconnect" okButtonProps={{ danger: true }}
+                    onConfirm={() => onDelete(a.connection_id)}
+                  >
+                    <Button size="small" danger icon={<DeleteOutlined />}
+                      loading={deletingId === a.connection_id} />
+                  </Popconfirm>
                 </Space>
               </div>
             )

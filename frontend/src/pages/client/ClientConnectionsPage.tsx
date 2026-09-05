@@ -3,6 +3,7 @@ import { Alert, App, Col, Input, Modal, Row, Space, Spin, Tag, Typography } from
 import { useSearchParams } from 'react-router-dom'
 
 import {
+  useDeleteConnectionMutation,
   useOverviewQuery,
   useStartConnectionMutation,
   useTestConnectionMutation,
@@ -14,11 +15,14 @@ const { Title, Text } = Typography
 export default function ClientConnectionsPage() {
   const { data, isLoading, refetch } = useOverviewQuery()
   const [startConnection, { isLoading: starting }] = useStartConnectionMutation()
-  const [testConnection, { isLoading: testing }] = useTestConnectionMutation()
+  const [testConnection] = useTestConnectionMutation()
+  const [deleteConnection] = useDeleteConnectionMutation()
   const [params, setParams] = useSearchParams()
   const { message } = App.useApp()
   const [shopModalOpen, setShopModalOpen] = useState(false)
   const [shop, setShop] = useState('')
+  const [testingId, setTestingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   useEffect(() => {
     if (params.get('connected')) {
@@ -51,10 +55,27 @@ export default function ClientConnectionsPage() {
   }
 
   const onTest = async (connectionId: number) => {
-    const res = await testConnection(connectionId).unwrap()
-    res.ok
-      ? message.success('Connection is healthy.')
-      : message.warning('This connection needs reconnecting.')
+    setTestingId(connectionId)
+    try {
+      const res = await testConnection(connectionId).unwrap()
+      res.ok
+        ? message.success('Connection is healthy.')
+        : message.warning('This connection needs reconnecting.')
+    } finally {
+      setTestingId(null)
+    }
+  }
+
+  const onDelete = async (connectionId: number) => {
+    setDeletingId(connectionId)
+    try {
+      await deleteConnection(connectionId).unwrap()
+      message.success('Account disconnected.')
+    } catch {
+      message.error('Could not disconnect the account.')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const needsReconnect = (data?.items ?? [])
@@ -91,10 +112,12 @@ export default function ClientConnectionsPage() {
               <ProviderConnectionsCard
                 item={item}
                 connecting={starting}
-                testing={testing}
+                testingId={testingId}
+                deletingId={deletingId}
                 onConnect={connect}
                 onReconnect={connect}
                 onTest={onTest}
+                onDelete={onDelete}
               />
             </Col>
           ))}

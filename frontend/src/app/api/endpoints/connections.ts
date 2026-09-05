@@ -21,6 +21,10 @@ export const connectionsApi = apiSlice.injectEndpoints({
       query: (id) => ({ url: `/connections/${id}/test`, method: 'post' }),
       invalidatesTags: ['Connections', 'Dashboard'],
     }),
+    deleteConnection: build.mutation<void, number>({
+      query: (id) => ({ url: `/connections/${id}/`, method: 'delete' }),
+      invalidatesTags: ['Connections', 'Dashboard'],
+    }),
   }),
 })
 
@@ -28,4 +32,5 @@ export const {
   useOverviewQuery,
   useStartConnectionMutation,
   useTestConnectionMutation,
+  useDeleteConnectionMutation,
 } = connectionsApi

@@ -19,14 +19,16 @@ def _callback_url() -> str:
     return settings.BACKEND_BASE_URL.rstrip('/') + reverse('connections:callback')
 
 
-def start_connection(client_org, provider, created_by=None) -> str:
+def start_connection(client_org, provider, created_by=None, params=None) -> str:
     """Create an OAuth state and return the provider authorize URL."""
+    params = params or {}
     state = generate_state()
     OAuthState.objects.create(
-        state=state, client_org=client_org, provider=provider, created_by=created_by
+        state=state, client_org=client_org, provider=provider,
+        created_by=created_by, meta=params,
     )
     adapter = get_adapter(provider)
-    return adapter.authorize_url(state, _callback_url())
+    return adapter.authorize_url(state, _callback_url(), params)
 
 
 def complete_connection(state: str, code: str) -> Connection:
@@ -34,7 +36,9 @@ def complete_connection(state: str, code: str) -> Connection:
     oauth_state = OAuthState.objects.select_related('client_org', 'provider').get(state=state)
     provider = oauth_state.provider
     adapter = get_adapter(provider)
-    result = adapter.exchange_code(code, state)
+    # Real providers need the exact redirect_uri at token-exchange time.
+    exchange_params = {**(oauth_state.meta or {}), 'redirect_uri': _callback_url()}
+    result = adapter.exchange_code(code, state, exchange_params)
 
     connection, _ = Connection.objects.update_or_create(
         client_org=oauth_state.client_org,

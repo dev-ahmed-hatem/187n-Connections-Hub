@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { App, Col, Row, Space, Spin, Tag, Typography } from 'antd'
+import { useEffect, useState } from 'react'
+import { App, Col, Input, Modal, Row, Space, Spin, Tag, Typography } from 'antd'
 import { useSearchParams } from 'react-router-dom'
 
 import { useOverviewQuery, useStartConnectionMutation } from '@/app/api/endpoints/connections'
@@ -12,6 +12,8 @@ export default function ClientConnectionsPage() {
   const [startConnection, { isLoading: starting }] = useStartConnectionMutation()
   const [params, setParams] = useSearchParams()
   const { message } = App.useApp()
+  const [shopModalOpen, setShopModalOpen] = useState(false)
+  const [shop, setShop] = useState('')
 
   useEffect(() => {
     if (params.get('connected')) {
@@ -24,13 +26,24 @@ export default function ClientConnectionsPage() {
     }
   }, [params, message, refetch, setParams])
 
-  const connect = async (provider: string) => {
+  const connect = async (provider: string, providerParams?: Record<string, string>) => {
+    // Shopify needs the store domain before we can build the authorize URL.
+    if (provider === 'shopify' && !providerParams?.shop) {
+      setShopModalOpen(true)
+      return
+    }
     try {
-      const res = await startConnection({ provider }).unwrap()
+      const res = await startConnection({ provider, params: providerParams }).unwrap()
       window.location.href = res.authorize_url
     } catch {
       message.error('Could not start the connection.')
     }
+  }
+
+  const confirmShop = () => {
+    if (!shop.trim()) return
+    setShopModalOpen(false)
+    connect('shopify', { shop: shop.trim() })
   }
 
   return (
@@ -64,6 +77,25 @@ export default function ClientConnectionsPage() {
           ))}
         </Row>
       )}
+
+      <Modal
+        title="Connect Shopify"
+        open={shopModalOpen}
+        onCancel={() => setShopModalOpen(false)}
+        onOk={confirmShop}
+        okText="Continue"
+      >
+        <Typography.Paragraph type="secondary">
+          Enter your store domain to continue to Shopify's consent screen.
+        </Typography.Paragraph>
+        <Input
+          placeholder="your-store.myshopify.com"
+          value={shop}
+          onChange={(e) => setShop(e.target.value)}
+          onPressEnter={confirmShop}
+          autoFocus
+        />
+      </Modal>
     </Space>
   )
 }

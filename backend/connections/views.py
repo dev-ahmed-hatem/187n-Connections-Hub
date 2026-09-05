@@ -69,7 +69,15 @@ class ConnectionStartView(APIView):
         provider = Provider.objects.filter(slug=provider_ref, is_active=True).first() \
             or get_object_or_404(Provider, id=provider_ref, is_active=True)
 
-        authorize_url = start_connection(org, provider, created_by=request.user)
+        params = request.data.get('params') or {}
+        # Shopify (and any shop-scoped provider) needs the store domain up front.
+        if provider.slug == 'shopify' and not params.get('shop'):
+            return Response({'detail': 'shop is required for Shopify.'}, status=400)
+
+        try:
+            authorize_url = start_connection(org, provider, created_by=request.user, params=params)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=400)
         return Response({'authorize_url': authorize_url})
 
 

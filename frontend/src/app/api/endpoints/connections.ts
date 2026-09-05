@@ -13,7 +13,7 @@ export const connectionsApi = apiSlice.injectEndpoints({
     }),
     startConnection: build.mutation<
       { authorize_url: string },
-      { provider: string; client_org?: number }
+      { provider: string; client_org?: number; params?: Record<string, string> }
     >({
       query: (body) => ({ url: '/connections/start/', method: 'post', data: body }),
     }),

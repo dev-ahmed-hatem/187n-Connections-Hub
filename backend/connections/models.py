@@ -67,6 +67,8 @@ class OAuthState(models.Model):
     state = models.CharField(max_length=64, unique=True)
     client_org = models.ForeignKey('users.ClientOrg', on_delete=models.CASCADE)
     provider = models.ForeignKey('providers.Provider', on_delete=models.CASCADE)
+    # Provider-specific start inputs captured before the redirect (e.g. Shopify shop).
+    meta = models.JSONField(default=dict, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
     )

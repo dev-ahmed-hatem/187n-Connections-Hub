@@ -13,12 +13,17 @@ class ProviderAdapter(abc.ABC):
         self.provider = provider
 
     @abc.abstractmethod
-    def authorize_url(self, state: str, redirect_uri: str) -> str:
-        """Return the URL to send the user to for consent."""
+    def authorize_url(self, state: str, redirect_uri: str, params: dict | None = None) -> str:
+        """Return the URL to send the user to for consent.
+
+        `params` carries provider-specific start inputs (e.g. Shopify `shop`).
+        """
 
     @abc.abstractmethod
-    def exchange_code(self, code: str, state: str) -> dict:
+    def exchange_code(self, code: str, state: str, params: dict | None = None) -> dict:
         """Exchange a consent code for tokens.
+
+        `params` is whatever was captured at start time (stored on OAuthState.meta).
 
         Returns: {
             'refresh_token': str,

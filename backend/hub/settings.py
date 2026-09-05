@@ -164,3 +164,33 @@ CORS_ALLOW_CREDENTIALS = True
 BACKEND_BASE_URL = env('BACKEND_BASE_URL', 'http://localhost:8000')
 # Where the frontend lives (used for post-connect redirects in the mock flow).
 FRONTEND_BASE_URL = env('FRONTEND_BASE_URL', 'http://localhost:5173')
+
+
+def _csv(key, default=''):
+    return [s.strip() for s in env(key, default).split(',') if s.strip()]
+
+
+# Real-provider OAuth/API configuration (used only when Provider.is_mock is False).
+# Missing values are fine while a provider stays on the mock adapter.
+PROVIDER_CONFIG = {
+    'google-ads': {
+        'client_id': env('GOOGLE_ADS_CLIENT_ID', ''),
+        'client_secret': env('GOOGLE_ADS_CLIENT_SECRET', ''),
+        'developer_token': env('GOOGLE_ADS_DEVELOPER_TOKEN', ''),
+        'login_customer_id': env('GOOGLE_ADS_LOGIN_CUSTOMER_ID', ''),
+        'api_version': env('GOOGLE_ADS_API_VERSION', 'v18'),
+        'scopes': ['https://www.googleapis.com/auth/adwords'],
+    },
+    'meta-ads': {
+        'client_id': env('META_APP_ID', ''),
+        'client_secret': env('META_APP_SECRET', ''),
+        'api_version': env('META_API_VERSION', 'v21.0'),
+        'scopes': _csv('META_SCOPES', 'ads_read'),
+    },
+    'shopify': {
+        'client_id': env('SHOPIFY_API_KEY', ''),
+        'client_secret': env('SHOPIFY_API_SECRET', ''),
+        'api_version': env('SHOPIFY_API_VERSION', '2024-10'),
+        'scopes': _csv('SHOPIFY_SCOPES', 'read_orders,read_products'),
+    },
+}

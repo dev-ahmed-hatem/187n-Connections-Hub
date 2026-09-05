@@ -89,10 +89,23 @@ curl -X POST "http://localhost:8000/api/access/clients/1/shopify/token" \
 - **Adapter interface** (`providers/adapters/base.py`) isolates provider specifics — going
   live means adding a real adapter + credentials, nothing else.
 
-## Going live (later)
+## Going live with real providers
 
-For each provider: implement a real `ProviderAdapter`, register it, set the `Provider.is_mock`
-flag off, and supply real OAuth client id/secret (+ Google Ads developer token) via env.
+Real OAuth adapters for **Google Ads, Meta Ads, Shopify** are implemented
+(`backend/providers/adapters/{google_ads,meta_ads,shopify}.py`). To connect real accounts:
+
+1. Create the provider's OAuth app and put its credentials in `backend/.env`
+   (see the per-provider block in `.env.example`).
+2. Flip the provider live (validates config, fails loudly if incomplete):
+   ```bash
+   python manage.py set_provider_mode shopify --live     # --mock to revert
+   ```
+
+Full step-by-step setup (app creation, scopes, redirect URIs, test accounts, and the local
+HTTPS tunnel needed for Shopify) is in **[docs/providers.md](docs/providers.md)**.
+
+Mock and live can be mixed per provider while credentials/approvals are pending. The mock
+stays the default from `seed_demo`.
 
 ## Tests
 

@@ -18,7 +18,7 @@ def _digest(*parts) -> str:
 
 
 class MockAdapter(ProviderAdapter):
-    def authorize_url(self, state: str, redirect_uri: str) -> str:
+    def authorize_url(self, state: str, redirect_uri: str, params: dict | None = None) -> str:
         base = settings.BACKEND_BASE_URL.rstrip('/') + reverse('providers:mock_authorize')
         return (
             f'{base}?provider={self.provider.slug}'
@@ -33,7 +33,7 @@ class MockAdapter(ProviderAdapter):
         n = int(_digest('acct', self.provider.slug, state)[:12], 16) % (10 ** 10)
         return str(n).zfill(10)
 
-    def exchange_code(self, code: str, state: str) -> dict:
+    def exchange_code(self, code: str, state: str, params: dict | None = None) -> dict:
         d = _digest(self.provider.slug, state)
         meta = {'account_name': f'{self.provider.name} — Demo Account'}
         if self.provider.slug == 'google-ads':

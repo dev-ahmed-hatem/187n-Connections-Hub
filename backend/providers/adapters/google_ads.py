@@ -57,7 +57,7 @@ class GoogleAdsAdapter(RealAdapter):
         }
 
     def list_accounts(self, access_token, meta):
-        version = self.config.get('api_version', 'v18')
+        version = self.config.get('api_version', 'v21')
         data = self._get(
             f'{API_ROOT}/{version}/customers:listAccessibleCustomers',
             headers={'Authorization': f'Bearer {access_token}',
@@ -92,7 +92,7 @@ class GoogleAdsAdapter(RealAdapter):
         customer_id = (meta.get('external_account_id') or '').replace('-', '')
         login_customer_id = (meta.get('login_customer_id')
                              or self.config.get('login_customer_id') or customer_id)
-        version = self.config.get('api_version', 'v18')
+        version = self.config.get('api_version', 'v21')
         headers = {
             'Authorization': f'Bearer {access_token}',
             'developer-token': self.config['developer_token'],
@@ -132,7 +132,7 @@ class GoogleAdsAdapter(RealAdapter):
         return None
 
     def _first_customer(self, access_token):
-        version = self.config.get('api_version', 'v18')
+        version = self.config.get('api_version', 'v21')
         data = self._get(
             f'{API_ROOT}/{version}/customers:listAccessibleCustomers',
             headers={

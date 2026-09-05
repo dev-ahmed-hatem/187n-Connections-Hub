@@ -193,7 +193,7 @@ PROVIDER_CONFIG = {
         'client_secret': env('GOOGLE_ADS_CLIENT_SECRET', ''),
         'developer_token': env('GOOGLE_ADS_DEVELOPER_TOKEN', ''),
         'login_customer_id': env('GOOGLE_ADS_LOGIN_CUSTOMER_ID', ''),
-        'api_version': env('GOOGLE_ADS_API_VERSION', 'v18'),
+        'api_version': env('GOOGLE_ADS_API_VERSION', 'v21'),
         'scopes': ['https://www.googleapis.com/auth/adwords'],
     },
     'meta-ads': {

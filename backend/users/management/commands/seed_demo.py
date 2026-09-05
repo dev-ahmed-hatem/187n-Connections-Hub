@@ -17,8 +17,8 @@ from users.models import ClientOrg
 User = get_user_model()
 
 PROVIDERS = [
-    {'slug': 'google-ads', 'name': 'Google Ads', 'short_code': 'G', 'color': '#3b7ddd'},
-    {'slug': 'meta-ads', 'name': 'Meta Ads', 'short_code': 'M', 'color': '#5b6ef0'},
+    {'slug': 'google-ads', 'name': 'Google', 'short_code': 'G', 'color': '#4285F4'},
+    {'slug': 'meta-ads', 'name': 'Meta', 'short_code': 'M', 'color': '#5b6ef0'},
     {'slug': 'shopify', 'name': 'Shopify', 'short_code': 'S', 'color': '#5aa15a'},
 ]
 

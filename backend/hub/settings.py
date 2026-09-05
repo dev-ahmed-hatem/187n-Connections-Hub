@@ -185,6 +185,22 @@ def _csv(key, default=''):
     return [s.strip() for s in env(key, default).split(',') if s.strip()]
 
 
+# Broad, config-driven Google scopes. Override with the GOOGLE_SCOPES env var
+# (comma-separated) to match exactly the APIs you've enabled + added to the
+# OAuth consent screen. Each scope's API must be enabled in the Cloud project.
+DEFAULT_GOOGLE_SCOPES = [
+    'openid',
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/adwords',
+    'https://www.googleapis.com/auth/analytics.readonly',
+    'https://www.googleapis.com/auth/webmasters.readonly',
+    'https://www.googleapis.com/auth/content',
+    'https://www.googleapis.com/auth/business.manage',
+    'https://www.googleapis.com/auth/spreadsheets.readonly',
+    'https://www.googleapis.com/auth/drive.readonly',
+]
+
 # Real-provider OAuth/API configuration (used only when Provider.is_mock is False).
 # Missing values are fine while a provider stays on the mock adapter.
 PROVIDER_CONFIG = {
@@ -194,9 +210,7 @@ PROVIDER_CONFIG = {
         'developer_token': env('GOOGLE_ADS_DEVELOPER_TOKEN', ''),
         'login_customer_id': env('GOOGLE_ADS_LOGIN_CUSTOMER_ID', ''),
         'api_version': env('GOOGLE_ADS_API_VERSION', 'v21'),
-        # openid+email let us identify the connected account during an
-        # OAuth-only test (before a developer token is available).
-        'scopes': ['openid', 'email', 'https://www.googleapis.com/auth/adwords'],
+        'scopes': _csv('GOOGLE_SCOPES') or DEFAULT_GOOGLE_SCOPES,
     },
     'meta-ads': {
         'client_id': env('META_APP_ID', ''),

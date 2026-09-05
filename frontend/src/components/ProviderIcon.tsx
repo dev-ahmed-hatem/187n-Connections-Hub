@@ -1,10 +1,10 @@
-import { SiGoogleads, SiMeta, SiShopify } from 'react-icons/si'
+import { SiGoogle, SiMeta, SiShopify } from 'react-icons/si'
 import type { IconType } from 'react-icons'
 
 import type { Provider } from '@/types'
 
 const MAP: Record<string, { Icon: IconType; color: string }> = {
-  'google-ads': { Icon: SiGoogleads, color: '#4285F4' },
+  'google-ads': { Icon: SiGoogle, color: '#4285F4' },
   'meta-ads': { Icon: SiMeta, color: '#0467DF' },
   shopify: { Icon: SiShopify, color: '#95BF47' },
 }

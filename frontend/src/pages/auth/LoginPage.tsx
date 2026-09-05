@@ -30,9 +30,13 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center',
-      background: '#f4f5f7' }}>
+      padding: 16,
+      background: 'radial-gradient(1100px 460px at 50% -10%, var(--accent-soft), transparent), var(--bg-soft)' }}>
       <Card style={{ width: 380 }}>
-        <Title level={3} style={{ marginBottom: 4 }}>Connections Hub</Title>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <span className="hub-brand-tile"><img src="/brand-mark.svg" alt="" /></span>
+          <Title level={3} style={{ margin: 0 }}>Connections Hub</Title>
+        </div>
         <Text type="secondary">Sign in to continue</Text>
         <Form layout="vertical" onFinish={onFinish} style={{ marginTop: 20 }}>
           <Form.Item name="username" label="Username" rules={[{ required: true }]}>

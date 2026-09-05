@@ -73,11 +73,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider breakpoint="lg" collapsedWidth="0" width={230}
+      <Sider breakpoint="lg" collapsedWidth="0" width={240}
         style={{ background: token.colorBgContainer, borderRight: `1px solid ${token.colorBorderSecondary}` }}>
-        <div style={{ padding: '20px 20px 12px', fontWeight: 700, fontSize: 16,
-          color: token.colorText }}>
-          Connections Hub
+        <div className="hub-brand">
+          <span className="hub-brand-tile">
+            <img src="/brand-mark.svg" alt="" />
+          </span>
+          <span className="hub-brand-name">Connections Hub</span>
         </div>
         <Menu
           mode="inline"
@@ -88,7 +90,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         />
       </Sider>
       <Layout>
-        <Header style={{ background: token.colorBgContainer,
+        <Header className="hub-topbar" style={{
           borderBottom: `1px solid ${token.colorBorderSecondary}`,
           display: 'flex', alignItems: 'center', gap: 12, paddingInline: 20 }}>
           <Tag color={ROLE_COLOR[user.role]} style={{ textTransform: 'capitalize' }}>
@@ -107,7 +109,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </Tooltip>
           <Button icon={<LogoutOutlined />} onClick={onLogout}>Log out</Button>
         </Header>
-        <Content style={{ padding: 24, maxWidth: 1080, width: '100%', margin: '0 auto' }}>
+        <Content style={{ padding: '22px 20px 48px', maxWidth: 1200, width: '100%', margin: '0 auto' }}>
           {children}
         </Content>
       </Layout>

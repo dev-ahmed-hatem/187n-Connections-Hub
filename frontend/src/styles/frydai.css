@@ -1,0 +1,121 @@
+/* Frydai visual identity layer — CSS variables + signature touches that sit
+   on top of the Ant Design theme tokens. Dark mode is driven by
+   :root[data-theme="dark"] (set from the ui slice). */
+
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f6f5fb;
+  --bg-lilac: #efeaff;
+  --ink: #16131f;
+  --ink-soft: #6a6680;
+  --muted: #9a96a8;
+  --line: #ecebf2;
+  --line-2: #e2e0ec;
+  --accent: #6c5ce7;
+  --accent-soft: #efeaff;
+  --accent-ink: #4a3bc0;
+  --shadow-s: 0 4px 14px -6px rgba(34, 24, 78, 0.14);
+  --shadow-card: 0 1px 0 rgba(20, 16, 40, 0.02), 0 18px 40px -24px rgba(40, 28, 96, 0.28);
+  --topbar-bg: rgba(255, 255, 255, 0.9);
+  --brand-tile-bg: #efeaff;
+}
+
+:root[data-theme='dark'] {
+  --bg: #121018;
+  --bg-soft: #1a1724;
+  --bg-lilac: #221e30;
+  --ink: #f0ecf6;
+  --ink-soft: #b3adc4;
+  --muted: #9a94ad;
+  --line: #2a2638;
+  --line-2: #342f45;
+  --accent: #6c5ce7;
+  --accent-soft: rgba(108, 92, 231, 0.18);
+  --accent-ink: #b8abf5;
+  --shadow-s: 0 4px 14px -6px rgba(0, 0, 0, 0.45);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03), 0 18px 40px -24px rgba(0, 0, 0, 0.5);
+  --topbar-bg: rgba(18, 16, 24, 0.94);
+  --brand-tile-bg: rgba(108, 92, 231, 0.18);
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Frydai uses tight, near-black-purple headings */
+h1, h2, h3, h4, h5,
+.ant-typography {
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Thin, purple-tinted scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(108, 92, 231, 0.4) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(108, 92, 231, 0.35);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Soft, purple-tinted card shadow (subtle, like frydai dash cards) */
+.ant-card {
+  box-shadow: var(--shadow-s);
+}
+
+/* Signature: solid primary buttons are a purple vertical gradient.
+   Scoped to the solid variant so ghost/text primary buttons are untouched. */
+.ant-btn-color-primary.ant-btn-variant-solid {
+  background-image: linear-gradient(180deg, #8b7cf0, #6c5ce7);
+  border-color: transparent;
+}
+.ant-btn-color-primary.ant-btn-variant-solid:not(:disabled):hover {
+  background-image: linear-gradient(180deg, #7b6bec, #5a48d6);
+}
+
+/* Translucent, blurred topbar */
+.hub-topbar {
+  background: var(--topbar-bg) !important;
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+}
+
+/* Brand mark tile in the sidebar */
+.hub-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 18px 12px;
+}
+.hub-brand-tile {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--brand-tile-bg);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.hub-brand-tile img {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+.hub-brand-name {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}

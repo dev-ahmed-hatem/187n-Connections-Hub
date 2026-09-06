@@ -100,7 +100,10 @@ class ConnectionCallbackView(APIView):
         if not (code and state):
             return HttpResponseRedirect(f'{frontend}/client/connections?error=invalid_callback')
         try:
-            connection = complete_connection(state, code)
+            connection = complete_connection(state, code, request.query_params.dict())
+        except ValueError:
+            return HttpResponseRedirect(
+                f'{frontend}/client/connections?error=verification_failed')
         except Exception:
             return HttpResponseRedirect(f'{frontend}/client/connections?error=exchange_failed')
         return HttpResponseRedirect(

@@ -1,3 +1,5 @@
+import hashlib
+import hmac as hmaclib
 from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase, override_settings
@@ -37,6 +39,22 @@ class ShopifyAdapterTests(SimpleTestCase):
         self.assertIn('demo-store.myshopify.com/admin/oauth/authorize', url)
         self.assertIn('client_id=sk', url)
         self.assertIn('state=st8', url)
+
+    def _signed(self, params, secret='ss'):
+        message = '&'.join(f'{k}={params[k]}' for k in sorted(params))
+        return hmaclib.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+
+    def test_verify_callback_accepts_valid(self):
+        params = {'code': 'c', 'shop': 'demo-store.myshopify.com', 'state': 's', 'timestamp': '1'}
+        params['hmac'] = self._signed(params)
+        self.adapter.verify_callback(params)  # should not raise
+
+    def test_verify_callback_rejects_tampered(self):
+        params = {'code': 'c', 'shop': 'demo-store.myshopify.com', 'state': 's', 'timestamp': '1'}
+        params['hmac'] = self._signed(params)
+        params['shop'] = 'evil.myshopify.com'  # tamper after signing
+        with self.assertRaises(ValueError):
+            self.adapter.verify_callback(params)
 
     @patch('providers.adapters.real_base.requests')
     def test_exchange_code(self, req):

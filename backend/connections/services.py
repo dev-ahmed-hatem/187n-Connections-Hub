@@ -31,11 +31,13 @@ def start_connection(client_org, provider, created_by=None, params=None) -> str:
     return adapter.authorize_url(state, _callback_url(), params)
 
 
-def complete_connection(state: str, code: str) -> Connection:
+def complete_connection(state: str, code: str, query_params=None) -> Connection:
     """Exchange the code, create/update the connection + encrypted tokens."""
     oauth_state = OAuthState.objects.select_related('client_org', 'provider').get(state=state)
     provider = oauth_state.provider
     adapter = get_adapter(provider)
+    # Provider-specific callback verification (e.g. Shopify HMAC) before exchange.
+    adapter.verify_callback(query_params or {})
     # Real providers need the exact redirect_uri at token-exchange time.
     exchange_params = {**(oauth_state.meta or {}), 'redirect_uri': _callback_url()}
     result = adapter.exchange_code(code, state, exchange_params)

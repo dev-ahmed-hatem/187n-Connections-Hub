@@ -59,3 +59,11 @@ class ProviderAdapter(abc.ABC):
     @abc.abstractmethod
     def revoke(self, refresh_token: str) -> None:
         """Revoke a grant (best-effort)."""
+
+    def verify_callback(self, query_params: dict) -> None:
+        """Validate the raw OAuth callback params before exchange.
+
+        Default: no-op. Providers that sign their callbacks (e.g. Shopify HMAC)
+        override this and raise on tampering.
+        """
+        return None

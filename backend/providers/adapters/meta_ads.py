@@ -19,15 +19,18 @@ class MetaAdsAdapter(RealAdapter):
         return f'https://graph.facebook.com/{self.config.get("api_version", "v21.0")}'
 
     def authorize_url(self, state, redirect_uri, params=None):
-        query = urlencode({
+        q = {
             'client_id': self.config['client_id'],
             'redirect_uri': redirect_uri,
             'scope': ','.join(self.config.get('scopes', ['ads_read'])),
             'response_type': 'code',
             'state': state,
-        })
+        }
+        # Optional Facebook Login for Business configuration.
+        if self.config.get('config_id'):
+            q['config_id'] = self.config['config_id']
         version = self.config.get('api_version', 'v21.0')
-        return f'https://www.facebook.com/{version}/dialog/oauth?{query}'
+        return f'https://www.facebook.com/{version}/dialog/oauth?{urlencode(q)}'
 
     def exchange_code(self, code, state, params=None):
         redirect_uri = (params or {}).get('redirect_uri', '')

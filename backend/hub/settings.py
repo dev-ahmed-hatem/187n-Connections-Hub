@@ -201,6 +201,24 @@ DEFAULT_GOOGLE_SCOPES = [
     'https://www.googleapis.com/auth/drive.readonly',
 ]
 
+# Meta: read + act on ad accounts. ads_management/business_management need App
+# Review for other businesses (dev mode covers your own accounts).
+DEFAULT_META_SCOPES = ['ads_read', 'ads_management', 'business_management']
+
+# Shopify: broad read + write across the common commerce resources.
+DEFAULT_SHOPIFY_SCOPES = [
+    'read_orders', 'write_orders',
+    'read_products', 'write_products',
+    'read_customers', 'write_customers',
+    'read_inventory', 'write_inventory',
+    'read_fulfillments', 'write_fulfillments',
+    'read_discounts', 'write_discounts',
+    'read_price_rules', 'write_price_rules',
+    'read_draft_orders', 'write_draft_orders',
+    'read_content', 'write_content',
+    'read_reports',
+]
+
 # Real-provider OAuth/API configuration (used only when Provider.is_mock is False).
 # Missing values are fine while a provider stays on the mock adapter.
 PROVIDER_CONFIG = {
@@ -216,12 +234,13 @@ PROVIDER_CONFIG = {
         'client_id': env('META_APP_ID', ''),
         'client_secret': env('META_APP_SECRET', ''),
         'api_version': env('META_API_VERSION', 'v21.0'),
-        'scopes': _csv('META_SCOPES', 'ads_read'),
+        'config_id': env('META_CONFIG_ID', ''),
+        'scopes': _csv('META_SCOPES') or DEFAULT_META_SCOPES,
     },
     'shopify': {
         'client_id': env('SHOPIFY_API_KEY', ''),
         'client_secret': env('SHOPIFY_API_SECRET', ''),
-        'api_version': env('SHOPIFY_API_VERSION', '2024-10'),
-        'scopes': _csv('SHOPIFY_SCOPES', 'read_orders,read_products'),
+        'api_version': env('SHOPIFY_API_VERSION', '2025-01'),
+        'scopes': _csv('SHOPIFY_SCOPES') or DEFAULT_SHOPIFY_SCOPES,
     },
 }

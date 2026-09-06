@@ -24,46 +24,55 @@ ${BACKEND_BASE_URL}/api/connections/callback
 
 ---
 
-## Shopify (simplest — do this first)
+## Shopify (needs an HTTPS tunnel for local testing)
+
+Shopify **requires an HTTPS redirect**, so local testing needs a tunnel (ngrok/cloudflared).
 
 1. Create a **Shopify Partner** account → **Apps → Create app**.
-2. Set the redirect/callback URL to the hub callback (HTTPS tunnel locally).
+2. Run a tunnel (e.g. `cloudflared tunnel --url http://localhost:8000`) and set
+   `BACKEND_BASE_URL` in `.env` to the tunnel URL. Set the app's **Allowed redirection URL** to
+   `<tunnel>/api/connections/callback`.
 3. Copy the **API key** and **API secret key**.
-4. Create a **development store** to test against (Partners → Stores → Add store).
-5. `.env`:
+4. Create a **development store** (Partners → Stores → Add store).
+5. `.env` (leave `SHOPIFY_SCOPES` blank for the broad read+write default):
    ```
    SHOPIFY_API_KEY=...
    SHOPIFY_API_SECRET=...
-   SHOPIFY_SCOPES=read_orders,read_products
-   SHOPIFY_API_VERSION=2024-10
+   SHOPIFY_API_VERSION=2025-01
+   SHOPIFY_SCOPES=
    ```
 6. `python manage.py set_provider_mode shopify --live`
-7. In the client portal, click **Connect Shopify**, enter `your-dev-store.myshopify.com`,
-   approve. Then a developer can **Preview data** → real order/product counts.
+7. Client portal → **Connect Shopify** → enter `your-dev-store.myshopify.com` → approve.
 
-Notes: the offline access token does **not** expire; the shop domain is the account id.
+Notes: the OAuth callback is **HMAC-verified** with the API secret (forged callbacks are
+rejected → `?error=verification_failed`). The offline access token does **not** expire; the shop
+domain is the account id. On app uninstall the token dies → shows as `needs_reconnect`.
 
 ---
 
-## Meta Ads
+## Meta Ads (testable on localhost)
 
-1. **developers.facebook.com → My Apps → Create App** (type: Business).
-2. Add the **Marketing API** product; request the `ads_read` permission.
-3. Add the redirect URI under Facebook Login settings.
-4. Copy **App ID** and **App Secret**. In development mode you can use your own /
-   test ad accounts without full app review.
-5. `.env`:
+1. **developers.facebook.com → My Apps → Create App** (type: **Business**).
+2. Add **Facebook Login** + **Marketing API** products.
+3. Facebook Login → Settings → **Valid OAuth Redirect URIs**:
+   `http://localhost:8000/api/connections/callback`
+4. Copy **App ID** and **App Secret**. Keep the app in **Development** and add yourself as
+   admin/tester — dev mode reaches your own ad accounts.
+5. `.env` (leave `META_SCOPES` blank for the broad default
+   `ads_read, ads_management, business_management`):
    ```
    META_APP_ID=...
    META_APP_SECRET=...
-   META_SCOPES=ads_read
    META_API_VERSION=v21.0
+   META_SCOPES=
+   META_CONFIG_ID=        # only for Facebook Login for Business
    ```
 6. `python manage.py set_provider_mode meta-ads --live`
 
-Notes: Meta has no classic refresh token. The short-lived token is exchanged for a
-**long-lived** (~60-day) token, re-exchanged on refresh. Production breadth (accessing
-other businesses' ad accounts) needs **App Review**.
+Notes: no classic refresh token — the short-lived token is exchanged for a **long-lived**
+(~60-day) token, re-exchanged on refresh. `ads_management`/`business_management` on **other
+businesses'** accounts needs **App Review + Business verification** (your own accounts work in
+dev mode). If the app enables "Require app secret," calls also need an `appsecret_proof`.
 
 ---
 

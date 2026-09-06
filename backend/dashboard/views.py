@@ -1,4 +1,6 @@
 from django.db.models import Count
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,6 +17,7 @@ def _status_counts(qs):
     return counts
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 class DashboardView(APIView):
     """Role-appropriate summary for the landing dashboard."""
 

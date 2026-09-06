@@ -5,6 +5,38 @@ from django.utils import timezone
 from .fields import EncryptedTextField
 
 
+class ProviderCredential(models.Model):
+    """The encrypted vault entry for one OAuth grant.
+
+    A single consent can expose several accounts (e.g. many Google Ads customers
+    or Meta ad accounts) that all share one token — so credentials are keyed per
+    *grant*, and each Connection (account) references its credential. Separate
+    grants (a second Shopify shop, a second Google login) get separate rows.
+    """
+
+    client_org = models.ForeignKey(
+        'users.ClientOrg', on_delete=models.CASCADE, related_name='credentials'
+    )
+    provider = models.ForeignKey(
+        'providers.Provider', on_delete=models.CASCADE, related_name='credentials'
+    )
+    enc_refresh_token = EncryptedTextField(blank=True)
+    enc_access_token = EncryptedTextField(blank=True)
+    access_expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_access_expired(self) -> bool:
+        if not self.access_expires_at:
+            return True
+        # Refresh a little early to avoid edge-of-expiry failures.
+        return timezone.now() >= self.access_expires_at - timezone.timedelta(seconds=30)
+
+    def __str__(self):
+        return f'Credential {self.client_org_id}/{self.provider_id}'
+
+
 class Connection(models.Model):
     """A live link between a client org and a provider account."""
 
@@ -19,6 +51,11 @@ class Connection(models.Model):
     )
     provider = models.ForeignKey(
         'providers.Provider', on_delete=models.CASCADE, related_name='connections'
+    )
+    # The shared OAuth grant this account's tokens live on.
+    credential = models.ForeignKey(
+        ProviderCredential, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='connections',
     )
     external_account_id = models.CharField(max_length=128, blank=True)
     display_name = models.CharField(max_length=255, blank=True)
@@ -38,29 +75,6 @@ class Connection(models.Model):
 
     def __str__(self):
         return f'{self.client_org} · {self.provider} [{self.status}]'
-
-
-class TokenSet(models.Model):
-    """The encrypted vault entry for a connection."""
-
-    connection = models.OneToOneField(
-        Connection, on_delete=models.CASCADE, related_name='tokens'
-    )
-    enc_refresh_token = EncryptedTextField(blank=True)
-    enc_access_token = EncryptedTextField(blank=True)
-    access_expires_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    @property
-    def is_access_expired(self) -> bool:
-        if not self.access_expires_at:
-            return True
-        # Refresh a little early to avoid edge-of-expiry failures.
-        return timezone.now() >= self.access_expires_at - timezone.timedelta(seconds=30)
-
-    def __str__(self):
-        return f'Tokens for {self.connection_id}'
 
 
 class OAuthState(models.Model):

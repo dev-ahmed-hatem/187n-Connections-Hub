@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -50,6 +52,7 @@ class ConsumerViewSet(viewsets.ModelViewSet):
         data['api_key'] = raw_key  # shown once
         return Response(data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=['post'], url_path='rotate-key')
     def rotate_key(self, request, pk=None):
         consumer = self.get_object()
@@ -58,6 +61,7 @@ class ConsumerViewSet(viewsets.ModelViewSet):
         data['api_key'] = raw_key  # shown once; old key now invalid
         return Response(data)
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=['get'])
     def access(self, request, pk=None):
         """This project's granted clients/platforms, each with live connection status."""
@@ -139,6 +143,7 @@ class GrantRequestViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('You can only request access for your own projects.')
         serializer.save(requested_by=user, status=GrantRequest.Status.PENDING)
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=['post'], permission_classes=[IsAdminRole])
     def approve(self, request, pk=None):
         gr = self.get_object()
@@ -154,6 +159,7 @@ class GrantRequestViewSet(viewsets.ModelViewSet):
         gr.save(update_fields=['status', 'decided_by', 'decided_at'])
         return Response(GrantRequestSerializer(gr).data)
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=['post'], permission_classes=[IsAdminRole])
     def deny(self, request, pk=None):
         gr = self.get_object()
@@ -200,7 +206,7 @@ class _AccessBase(APIView):
         one; requires account_id when several are connected."""
         conns = list(Connection.objects.filter(
             client_org=org, provider=provider, status=Connection.Status.CONNECTED,
-        ).select_related('provider', 'tokens'))
+        ).select_related('provider', 'credential'))
         if not conns:
             return None, Response(
                 {'detail': 'Provider is not connected for this client.'}, status=409)
@@ -219,6 +225,7 @@ class _AccessBase(APIView):
         }, status=400)
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 class AccessConnectionsView(_AccessBase):
     """List a client's connected accounts per provider (discovery)."""
 
@@ -242,6 +249,7 @@ class AccessConnectionsView(_AccessBase):
         return Response({'client_org': org.id, 'connections': items})
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 class AccessDataView(_AccessBase):
     """Data-proxy: the hub calls the provider and returns clean data."""
 
@@ -272,6 +280,7 @@ class AccessDataView(_AccessBase):
         return Response(data)
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 class AccessTokenView(_AccessBase):
     """Token-broker: return a short-lived access token for direct provider calls."""
 
@@ -305,6 +314,7 @@ class AccessTokenView(_AccessBase):
         return Response(payload)
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 class AccessRequestConnectionView(_AccessBase):
     """A developer asks a client to connect a provider (surfaces in the portal)."""
 

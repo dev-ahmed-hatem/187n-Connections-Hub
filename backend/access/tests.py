@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from connections.models import Connection, TokenSet
+from connections.models import Connection, ProviderCredential
 from providers.models import Provider
 from users.models import ClientOrg
 
@@ -17,14 +17,14 @@ class AccessApiTests(APITestCase):
         self.provider = Provider.objects.create(
             slug='google-ads', name='Google Ads', is_mock=True
         )
-        self.conn = Connection.objects.create(
+        cred = ProviderCredential.objects.create(
             client_org=self.org, provider=self.provider,
-            external_account_id='1234567890', status=Connection.Status.CONNECTED,
-        )
-        TokenSet.objects.create(
-            connection=self.conn,
             enc_refresh_token='r', enc_access_token='a',
             access_expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        self.conn = Connection.objects.create(
+            client_org=self.org, provider=self.provider, credential=cred,
+            external_account_id='1234567890', status=Connection.Status.CONNECTED,
         )
         self.developer = User.objects.create_user(
             username='dev', password='x', role=User.Role.DEVELOPER
@@ -100,12 +100,13 @@ class MultiAccountAccessTests(APITestCase):
         self.consumer, self.raw_key = Consumer.create_with_key('proj', self.dev)
         Grant.objects.create(consumer=self.consumer, client_org=self.org, provider=self.provider)
         self.accounts = ['1111111111', '2222222222']
+        cred = ProviderCredential.objects.create(
+            client_org=self.org, provider=self.provider, enc_access_token='a',
+            access_expires_at=timezone.now() + timezone.timedelta(hours=1))
         for acct in self.accounts:
-            conn = Connection.objects.create(
-                client_org=self.org, provider=self.provider, external_account_id=acct,
-                status=Connection.Status.CONNECTED)
-            TokenSet.objects.create(connection=conn, enc_access_token='a',
-                                    access_expires_at=timezone.now() + timezone.timedelta(hours=1))
+            Connection.objects.create(
+                client_org=self.org, provider=self.provider, credential=cred,
+                external_account_id=acct, status=Connection.Status.CONNECTED)
         self.client.credentials(HTTP_AUTHORIZATION=f'ApiKey {self.raw_key}')
 
     def url(self):

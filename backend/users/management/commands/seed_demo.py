@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from access.models import Consumer, Grant
-from connections.models import Connection, TokenSet
+from connections.models import Connection, ProviderCredential
 from portal.models import Announcement, ConnectionRequest, Note
 from providers.adapters import get_adapter
 from providers.models import Provider
@@ -140,17 +140,18 @@ class Command(BaseCommand):
         expires_at = timezone.now() + timezone.timedelta(seconds=result['expires_in'])
         enum_meta = {**result['meta'], 'external_account_id': result.get('external_account_id', '')}
         accounts = adapter.list_accounts(result['access_token'], enum_meta)
+        credential = ProviderCredential.objects.create(
+            client_org=org, provider=provider,
+            enc_refresh_token=result['refresh_token'],
+            enc_access_token=result['access_token'],
+            access_expires_at=expires_at,
+        )
         for acct in accounts:
-            conn, _ = Connection.objects.update_or_create(
+            Connection.objects.update_or_create(
                 client_org=org, provider=provider,
                 external_account_id=acct['external_account_id'],
-                defaults={'display_name': acct.get('display_name') or provider.name,
+                defaults={'credential': credential,
+                          'display_name': acct.get('display_name') or provider.name,
                           'status': status, 'meta': acct.get('meta', {}),
                           'last_checked': timezone.now()},
-            )
-            TokenSet.objects.update_or_create(
-                connection=conn,
-                defaults={'enc_refresh_token': result['refresh_token'],
-                          'enc_access_token': result['access_token'],
-                          'access_expires_at': expires_at},
             )

@@ -56,6 +56,21 @@ const { access_token } = await fetch(
   { method: "POST", headers }
 ).then((r) => r.json());`
 
+  const base = `${API_BASE}/access/clients/${org}/google-ads/data`
+  const googleResources = `# Google Analytics (GA4) — list properties, then report
+GET ${base}?resource=analytics
+GET ${base}?resource=analytics&property_id=123456789
+
+# Search Console — list sites, then query
+GET ${base}?resource=search-console
+GET ${base}?resource=search-console&site_url=https://example.com/
+
+# Merchant Center — list accessible merchant accounts
+GET ${base}?resource=merchant
+
+# Google Ads (needs developer token)
+GET ${base}?resource=ads`
+
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
@@ -89,6 +104,15 @@ const { access_token } = await fetch(
             { key: 'js', label: 'JavaScript', children: <CodeBlock code={js} /> },
           ]}
         />
+      </Card>
+
+      <Card title="Google: pick a service with ?resource=">
+        <Paragraph type="secondary">
+          The Google connector spans several services. On the data endpoint, pass{' '}
+          <Text code>resource</Text> — call without an id to list, then with the id to report.
+          (Ads needs a developer token; Analytics/Search Console/Merchant work with the OAuth token.)
+        </Paragraph>
+        <CodeBlock code={googleResources} />
       </Card>
     </Space>
   )

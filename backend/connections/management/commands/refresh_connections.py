@@ -1,30 +1,21 @@
-"""Renew near-expiry access tokens; flag failures as needing reconnect."""
+"""Renew near-expiry provider credentials; flag failures as needs_reconnect."""
 
 from django.core.management.base import BaseCommand
 
-from connections.models import Connection
-from connections.services import get_valid_access_token
+from connections.services import refresh_stale_credentials
 
 
 class Command(BaseCommand):
-    help = 'Refresh access tokens for connected connections that are near expiry.'
+    help = 'Refresh provider credentials at/near expiry (one-shot).'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--threshold', type=int, default=3600,
+            help='Refresh credentials expiring within this many seconds (default 3600).',
+        )
 
     def handle(self, *args, **options):
-        refreshed = 0
-        failed = 0
-        for conn in Connection.objects.filter(
-            status=Connection.Status.CONNECTED
-        ).select_related('provider', 'tokens'):
-            tokens = getattr(conn, 'tokens', None)
-            if not tokens or not tokens.is_access_expired:
-                continue
-            try:
-                get_valid_access_token(conn)
-                refreshed += 1
-            except Exception:
-                conn.status = Connection.Status.NEEDS_RECONNECT
-                conn.save(update_fields=['status', 'updated_at'])
-                failed += 1
+        refreshed, failed = refresh_stale_credentials(options['threshold'])
         self.stdout.write(self.style.SUCCESS(
-            f'Refreshed {refreshed} connection(s); {failed} flagged needs_reconnect.'
+            f'Refreshed {refreshed} credential(s); {failed} flagged needs_reconnect.'
         ))

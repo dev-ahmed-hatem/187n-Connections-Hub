@@ -2,6 +2,8 @@ from django.conf import settings
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -27,6 +29,7 @@ def resolve_client_org(request):
     return get_object_or_404(ClientOrg, id=org_id)
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 class ConnectionOverviewView(APIView):
     """Per-provider connection status for a client org (drives the status cards)."""
 
@@ -56,6 +59,7 @@ class ConnectionOverviewView(APIView):
         return Response({'client_org': org.id, 'client_org_name': org.name, 'items': items})
 
 
+@extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)
 class ConnectionStartView(APIView):
     """Begin connecting a provider — returns the (mock) authorize URL."""
 
@@ -84,6 +88,7 @@ class ConnectionStartView(APIView):
         return Response({'authorize_url': authorize_url})
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 class ConnectionCallbackView(APIView):
     """OAuth redirect target. Completes the connection then bounces to the frontend."""
 
@@ -111,6 +116,7 @@ class ConnectionCallbackView(APIView):
         )
 
 
+@extend_schema(request=None, responses=OpenApiTypes.OBJECT)
 class ConnectionTestView(APIView):
     """Verify a connection by exercising the adapter; update status accordingly."""
 

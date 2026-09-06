@@ -6,7 +6,7 @@ from providers.adapters import get_adapter
 from providers.models import Provider
 from users.models import ClientOrg
 
-from .models import Connection, TokenSet
+from .models import Connection, ProviderCredential
 
 
 class EncryptionTests(TestCase):
@@ -15,18 +15,17 @@ class EncryptionTests(TestCase):
         self.provider = Provider.objects.create(slug='google-ads', name='Google Ads', is_mock=True)
 
     def test_token_round_trip_and_ciphertext_at_rest(self):
-        conn = Connection.objects.create(client_org=self.org, provider=self.provider)
-        TokenSet.objects.create(
-            connection=conn,
+        cred = ProviderCredential.objects.create(
+            client_org=self.org, provider=self.provider,
             enc_refresh_token='super-secret-refresh',
             access_expires_at=timezone.now(),
         )
         # ORM decrypts transparently.
-        self.assertEqual(TokenSet.objects.get(connection=conn).enc_refresh_token,
+        self.assertEqual(ProviderCredential.objects.get(id=cred.id).enc_refresh_token,
                          'super-secret-refresh')
         # Raw DB value is Fernet ciphertext, not the plaintext.
         with db_connection.cursor() as cur:
-            cur.execute('SELECT enc_refresh_token FROM connections_tokenset')
+            cur.execute('SELECT enc_refresh_token FROM connections_providercredential')
             raw = cur.fetchone()[0]
         self.assertNotIn('super-secret-refresh', raw)
         self.assertTrue(raw.startswith('gAAAA'))
@@ -39,12 +38,13 @@ class TestConnectionEndpointTests(TestCase):
         User = get_user_model()
         self.org = ClientOrg.objects.create(name='Acme', slug='acme')
         self.provider = Provider.objects.create(slug='shopify', name='Shopify', is_mock=True)
+        cred = ProviderCredential.objects.create(
+            client_org=self.org, provider=self.provider, enc_access_token='a',
+            access_expires_at=timezone.now() + timezone.timedelta(hours=1))
         self.conn = Connection.objects.create(
-            client_org=self.org, provider=self.provider,
+            client_org=self.org, provider=self.provider, credential=cred,
             external_account_id='demo.myshopify.com', status=Connection.Status.CONNECTED,
             meta={'shop': 'demo.myshopify.com'})
-        TokenSet.objects.create(connection=self.conn, enc_access_token='a',
-                                access_expires_at=timezone.now() + timezone.timedelta(hours=1))
         self.user = User.objects.create_user(username='c', password='x',
                                              role=User.Role.CLIENT, client_org=self.org)
         self.api = APIClient()
@@ -71,6 +71,36 @@ class MultiAccountConnectTests(TestCase):
         conns = Connection.objects.filter(client_org=self.org, provider=self.provider)
         self.assertEqual(conns.count(), 2)  # mock google-ads exposes 2 accounts
         self.assertEqual(len({c.external_account_id for c in conns}), 2)
+        # Both accounts share ONE credential (the grant).
+        self.assertEqual(len({c.credential_id for c in conns}), 1)
+        self.assertEqual(ProviderCredential.objects.filter(
+            client_org=self.org, provider=self.provider).count(), 1)
+
+
+class CredentialRefreshTests(TestCase):
+    def setUp(self):
+        self.org = ClientOrg.objects.create(name='Acme', slug='acme')
+        self.provider = Provider.objects.create(slug='google-ads', name='Google', is_mock=True)
+
+    def test_refresh_stale_credentials_renews_expired(self):
+        from connections.services import refresh_stale_credentials
+        cred = ProviderCredential.objects.create(
+            client_org=self.org, provider=self.provider,
+            enc_refresh_token='mock-refresh-x', enc_access_token='old',
+            access_expires_at=timezone.now() - timezone.timedelta(hours=1))
+        refreshed, failed = refresh_stale_credentials(threshold_seconds=0)
+        self.assertEqual((refreshed, failed), (1, 0))
+        cred.refresh_from_db()
+        self.assertGreater(cred.access_expires_at, timezone.now())
+
+    def test_non_expiring_credential_skipped(self):
+        from connections.services import refresh_stale_credentials
+        ProviderCredential.objects.create(
+            client_org=self.org, provider=self.provider,
+            enc_refresh_token='', enc_access_token='shopify-offline',
+            access_expires_at=timezone.now() - timezone.timedelta(hours=1))
+        refreshed, failed = refresh_stale_credentials(threshold_seconds=0)
+        self.assertEqual((refreshed, failed), (0, 0))
 
 
 class MockAdapterTests(TestCase):

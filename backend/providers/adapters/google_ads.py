@@ -4,7 +4,8 @@ Standard OAuth2 offline flow (access + refresh token). API calls carry the
 developer token and login-customer-id (MCC) headers.
 """
 
-from urllib.parse import urlencode
+from datetime import date, timedelta
+from urllib.parse import quote, urlencode
 
 from .real_base import RealAdapter
 
@@ -13,6 +14,10 @@ TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v3/userinfo'
 API_ROOT = 'https://googleads.googleapis.com'
+ANALYTICS_ADMIN = 'https://analyticsadmin.googleapis.com/v1beta'
+ANALYTICS_DATA = 'https://analyticsdata.googleapis.com/v1beta'
+SEARCH_CONSOLE = 'https://searchconsole.googleapis.com/webmasters/v3'
+CONTENT_API = 'https://shoppingcontent.googleapis.com/content/v2.1'
 
 STATS_GAQL = (
     'SELECT metrics.cost_micros, metrics.clicks, metrics.impressions, '
@@ -107,15 +112,31 @@ class GoogleAdsAdapter(RealAdapter):
         return {'access_token': tok['access_token'], 'expires_in': int(tok.get('expires_in', 3600))}
 
     def fetch_data(self, access_token, resource, params, meta):
+        """Route the `resource` param to the right Google API (the OAuth token
+        carries the scopes). Discovery-then-fetch: no id → list; id → report."""
         meta = meta or {}
+        params = params or {}
+        resource = (resource or 'stats').lower()
+        if resource in ('stats', 'ads', 'google-ads'):
+            return self._ads(access_token, meta)
+        if resource in ('analytics', 'ga4'):
+            return self._analytics(access_token, params)
+        if resource in ('search-console', 'searchconsole', 'gsc'):
+            return self._search_console(access_token, params)
+        if resource == 'merchant':
+            return self._merchant(access_token)
+        return {'provider': 'google-ads', 'resource': resource,
+                'account': self._userinfo(access_token), 'mock': False}
+
+    def _ads(self, access_token, meta):
         if not self.config.get('developer_token'):
             return {
                 'provider': 'google-ads',
-                'resource': resource or 'stats',
+                'resource': 'stats',
                 'account_id': meta.get('external_account_id'),
                 'metrics': {},
                 'note': 'Connected, but a Google Ads developer token (from a Manager '
-                        'account) is required to pull data.',
+                        'account) is required to pull Ads data.',
                 'mock': False,
             }
         customer_id = (meta.get('external_account_id') or '').replace('-', '')
@@ -142,7 +163,7 @@ class GoogleAdsAdapter(RealAdapter):
             conversions += float(m.get('conversions', 0))
         return {
             'provider': 'google-ads',
-            'resource': resource or 'stats',
+            'resource': 'stats',
             'account_id': customer_id,
             'metrics': {
                 'spend': round(cost / 1_000_000, 2),
@@ -152,6 +173,59 @@ class GoogleAdsAdapter(RealAdapter):
             },
             'mock': False,
         }
+
+    def _analytics(self, access_token, params):
+        h = {'Authorization': f'Bearer {access_token}'}
+        pid = params.get('property_id')
+        if not pid:
+            data = self._get(f'{ANALYTICS_ADMIN}/accountSummaries', headers=h)
+            props = []
+            for acc in data.get('accountSummaries', []):
+                for p in acc.get('propertySummaries', []):
+                    props.append({'property': p.get('property'),
+                                  'display_name': p.get('displayName')})
+            return {'provider': 'google-ads', 'resource': 'analytics',
+                    'properties': props, 'mock': False}
+        prop = pid if str(pid).startswith('properties/') else f'properties/{pid}'
+        body = {'dateRanges': [{'startDate': '28daysAgo', 'endDate': 'today'}],
+                'metrics': [{'name': 'sessions'}, {'name': 'activeUsers'},
+                            {'name': 'screenPageViews'}]}
+        rep = self._post(f'{ANALYTICS_DATA}/{prop}:runReport', headers=h, json=body)
+        vals = (rep.get('rows') or [{}])[0].get('metricValues', []) if rep.get('rows') else []
+        names = ['sessions', 'activeUsers', 'screenPageViews']
+        metrics = {n: (vals[i].get('value') if i < len(vals) else None)
+                   for i, n in enumerate(names)}
+        return {'provider': 'google-ads', 'resource': 'analytics',
+                'account_id': prop, 'metrics': metrics, 'mock': False}
+
+    def _search_console(self, access_token, params):
+        h = {'Authorization': f'Bearer {access_token}'}
+        site = params.get('site_url')
+        if not site:
+            data = self._get(f'{SEARCH_CONSOLE}/sites', headers=h)
+            return {'provider': 'google-ads', 'resource': 'search-console',
+                    'sites': [s.get('siteUrl') for s in data.get('siteEntry', [])],
+                    'mock': False}
+        end = date.today()
+        start = end - timedelta(days=28)
+        rep = self._post(
+            f'{SEARCH_CONSOLE}/sites/{quote(site, safe="")}/searchAnalytics/query',
+            headers=h, json={'startDate': start.isoformat(), 'endDate': end.isoformat(),
+                             'dimensions': []},
+        )
+        row = (rep.get('rows') or [{}])[0]
+        return {'provider': 'google-ads', 'resource': 'search-console', 'account_id': site,
+                'metrics': {'clicks': row.get('clicks', 0), 'impressions': row.get('impressions', 0),
+                            'ctr': row.get('ctr', 0), 'position': row.get('position', 0)},
+                'mock': False}
+
+    def _merchant(self, access_token):
+        info = self._get(f'{CONTENT_API}/accounts/authinfo',
+                         headers={'Authorization': f'Bearer {access_token}'})
+        ids = [a.get('merchantId') or a.get('aggregatorId')
+               for a in info.get('accountIdentifiers', [])]
+        return {'provider': 'google-ads', 'resource': 'merchant',
+                'merchant_accounts': ids, 'mock': False}
 
     def revoke(self, refresh_token):
         try:

@@ -142,6 +142,21 @@ class GoogleAdsAdapterTests(SimpleTestCase):
         self.assertEqual(data['metrics']['spend'], 4.0)  # (2.5M + 1.5M) micros → 4.0
         self.assertEqual(data['metrics']['clicks'], 15)
 
+    @patch('providers.adapters.real_base.requests')
+    def test_fetch_data_routes_analytics_list(self, req):
+        req.get.return_value = resp({'accountSummaries': [
+            {'propertySummaries': [{'property': 'properties/1', 'displayName': 'GA4'}]}]})
+        data = self.adapter.fetch_data('ya29', 'analytics', {}, {})
+        self.assertEqual(data['resource'], 'analytics')
+        self.assertEqual(len(data['properties']), 1)
+
+    @patch('providers.adapters.real_base.requests')
+    def test_fetch_data_routes_search_console_list(self, req):
+        req.get.return_value = resp({'siteEntry': [{'siteUrl': 'https://example.com/'}]})
+        data = self.adapter.fetch_data('ya29', 'search-console', {}, {})
+        self.assertEqual(data['resource'], 'search-console')
+        self.assertEqual(data['sites'], ['https://example.com/'])
+
     @override_settings(PROVIDER_CONFIG={'google-ads': {'client_id': '', 'client_secret': '',
                                                        'developer_token': ''}})
     def test_missing_config_raises(self):

@@ -107,6 +107,17 @@ HTTPS tunnel needed for Shopify) is in **[docs/providers.md](docs/providers.md)*
 Mock and live can be mixed per provider while credentials/approvals are pending. The mock
 stays the default from `seed_demo`.
 
+## Background token refresh
+
+Access tokens refresh on demand, but you can also keep credentials fresh proactively (no Celery):
+
+```bash
+python manage.py refresh_connections            # one-shot: refresh near-expiry credentials
+python manage.py run_scheduler --interval 900   # blocking loop; run as its own process
+```
+
+Failures flip the affected connections to `needs_reconnect` so the client is prompted.
+
 ## Tests
 
 ```bash

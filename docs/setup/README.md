@@ -10,6 +10,9 @@ distribution, the exact scopes the hub requests, and the `.env` values.
 - **[Shopify](shopify.md)** — Partner app + dev store, config-driven scopes (**Release** a
   version), protected customer data, HMAC-verified callback, **distribution** (dev store /
   custom / public). No tunnel when the backend is HTTPS.
+- **[Onboarding real clients](onboarding-clients.md)** — how real clients authorize **before**
+  your apps are verified: Google test users, Meta testers, Shopify custom distribution — with the
+  friction and ceilings of each.
 
 Common to all:
 

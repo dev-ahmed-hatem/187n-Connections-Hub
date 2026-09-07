@@ -6,158 +6,120 @@ from connections.models import Connection, ProviderCredential
 from providers.models import Provider
 from users.models import ClientOrg
 
-from .models import Consumer, Grant
+from .models import Consumer, ProjectAccessRequest
 
 User = get_user_model()
 
 
-class AccessApiTests(APITestCase):
+def make_connection(org, provider, account_id, cred=None):
+    cred = cred or ProviderCredential.objects.create(
+        client_org=org, provider=provider, enc_access_token='a',
+        access_expires_at=timezone.now() + timezone.timedelta(hours=1))
+    Connection.objects.create(
+        client_org=org, provider=provider, credential=cred,
+        external_account_id=account_id, status=Connection.Status.CONNECTED)
+    return cred
+
+
+class ApiKeyAccessTests(APITestCase):
     def setUp(self):
         self.org = ClientOrg.objects.create(name='Acme', slug='acme')
-        self.provider = Provider.objects.create(
-            slug='google-ads', name='Google Ads', is_mock=True
-        )
-        cred = ProviderCredential.objects.create(
-            client_org=self.org, provider=self.provider,
-            enc_refresh_token='r', enc_access_token='a',
-            access_expires_at=timezone.now() + timezone.timedelta(hours=1),
-        )
-        self.conn = Connection.objects.create(
-            client_org=self.org, provider=self.provider, credential=cred,
-            external_account_id='1234567890', status=Connection.Status.CONNECTED,
-        )
-        self.developer = User.objects.create_user(
-            username='dev', password='x', role=User.Role.DEVELOPER
-        )
-        self.consumer, self.raw_key = Consumer.create_with_key('proj', self.developer)
+        self.other = ClientOrg.objects.create(name='Other', slug='other')
+        self.provider = Provider.objects.create(slug='google-ads', name='Google', is_mock=True)
+        make_connection(self.org, self.provider, '1234567890')
+        self.admin = User.objects.create_user('admin', password='x', role=User.Role.ADMIN)
+        self.project, self.raw_key = Consumer.create_with_key(
+            'proj', client_org=self.org, owner=self.admin)
 
     def _auth(self):
         self.client.credentials(HTTP_AUTHORIZATION=f'ApiKey {self.raw_key}')
 
-    def data_url(self, slug='google-ads'):
-        return f'/api/access/clients/{self.org.id}/{slug}/data'
+    def data_url(self, org):
+        return f'/api/access/clients/{org.id}/google-ads/data'
 
-    def test_denied_without_grant(self):
+    def test_key_accesses_its_client(self):
         self._auth()
-        res = self.client.get(self.data_url())
-        self.assertEqual(res.status_code, 403)
-
-    def test_allowed_with_grant(self):
-        Grant.objects.create(consumer=self.consumer, client_org=self.org, provider=self.provider)
-        self._auth()
-        res = self.client.get(self.data_url())
+        res = self.client.get(self.data_url(self.org))
         self.assertEqual(res.status_code, 200)
         self.assertIn('metrics', res.json())
 
-    def test_invalid_api_key_rejected(self):
-        self.client.credentials(HTTP_AUTHORIZATION='ApiKey not-a-real-key')
-        res = self.client.get(self.data_url())
-        self.assertIn(res.status_code, (401, 403))
+    def test_key_denied_for_other_client(self):
+        self._auth()
+        res = self.client.get(self.data_url(self.other))
+        self.assertEqual(res.status_code, 403)
 
-    def test_token_broker_with_grant(self):
-        Grant.objects.create(consumer=self.consumer, client_org=self.org, provider=self.provider)
+    def test_invalid_key_rejected(self):
+        self.client.credentials(HTTP_AUTHORIZATION='ApiKey not-real')
+        self.assertIn(self.client.get(self.data_url(self.org)).status_code, (401, 403))
+
+    def test_token_broker(self):
         self._auth()
         res = self.client.post(f'/api/access/clients/{self.org.id}/google-ads/token')
         self.assertEqual(res.status_code, 200)
-        body = res.json()
-        self.assertIn('access_token', body)
-        self.assertNotIn('refresh_token', body)  # never exposed
+        self.assertIn('access_token', res.json())
+        self.assertNotIn('refresh_token', res.json())
 
-    def test_scopes_enforced(self):
-        # read-only grant: data allowed, token denied
-        grant = Grant.objects.create(
-            consumer=self.consumer, client_org=self.org, provider=self.provider,
-            scopes=['read'])
+    def test_key_rotation_invalidates_old(self):
         self._auth()
-        self.assertEqual(self.client.get(self.data_url()).status_code, 200)
-        self.assertEqual(
-            self.client.post(f'/api/access/clients/{self.org.id}/google-ads/token').status_code,
-            403)
-        # empty scopes = full access
-        grant.scopes = []
-        grant.save()
-        self.assertEqual(
-            self.client.post(f'/api/access/clients/{self.org.id}/google-ads/token').status_code,
-            200)
-
-    def test_key_rotation_invalidates_old_key(self):
-        Grant.objects.create(consumer=self.consumer, client_org=self.org, provider=self.provider)
-        self._auth()
-        self.assertEqual(self.client.get(self.data_url()).status_code, 200)
-        new_key = self.consumer.rotate_key()
-        # old key now rejected
-        self.assertEqual(self.client.get(self.data_url()).status_code, 401)
-        # new key works
+        self.assertEqual(self.client.get(self.data_url(self.org)).status_code, 200)
+        new_key = self.project.rotate_key()
+        self.assertEqual(self.client.get(self.data_url(self.org)).status_code, 401)
         self.client.credentials(HTTP_AUTHORIZATION=f'ApiKey {new_key}')
+        self.assertEqual(self.client.get(self.data_url(self.org)).status_code, 200)
+
+
+class MemberAccessTests(APITestCase):
+    def setUp(self):
+        self.org = ClientOrg.objects.create(name='Acme', slug='acme')
+        self.provider = Provider.objects.create(slug='google-ads', name='Google', is_mock=True)
+        self.admin = User.objects.create_user('admin', password='x', role=User.Role.ADMIN)
+        self.dev = User.objects.create_user('dev', password='x', role=User.Role.DEVELOPER)
+        self.other_dev = User.objects.create_user('dev2', password='x', role=User.Role.DEVELOPER)
+        self.project, _ = Consumer.create_with_key('proj', client_org=self.org, owner=self.admin)
+        self.project.members.add(self.dev)
+
+    def data_url(self, params=''):
+        return f'/api/access/clients/{self.org.id}/google-ads/data{params}'
+
+    def test_member_dev_can_access(self):
+        make_connection(self.org, self.provider, '111')
+        self.client.force_authenticate(self.dev)
         self.assertEqual(self.client.get(self.data_url()).status_code, 200)
 
+    def test_non_member_dev_denied(self):
+        make_connection(self.org, self.provider, '111')
+        self.client.force_authenticate(self.other_dev)
+        self.assertEqual(self.client.get(self.data_url()).status_code, 403)
 
-class MultiAccountAccessTests(APITestCase):
-    def setUp(self):
-        self.org = ClientOrg.objects.create(name='Acme', slug='acme')
-        self.provider = Provider.objects.create(slug='google-ads', name='Google Ads', is_mock=True)
-        self.dev = User.objects.create_user(username='dev', password='x', role=User.Role.DEVELOPER)
-        self.consumer, self.raw_key = Consumer.create_with_key('proj', self.dev)
-        Grant.objects.create(consumer=self.consumer, client_org=self.org, provider=self.provider)
-        self.accounts = ['1111111111', '2222222222']
-        cred = ProviderCredential.objects.create(
-            client_org=self.org, provider=self.provider, enc_access_token='a',
-            access_expires_at=timezone.now() + timezone.timedelta(hours=1))
-        for acct in self.accounts:
-            Connection.objects.create(
-                client_org=self.org, provider=self.provider, credential=cred,
-                external_account_id=acct, status=Connection.Status.CONNECTED)
-        self.client.credentials(HTTP_AUTHORIZATION=f'ApiKey {self.raw_key}')
-
-    def url(self):
-        return f'/api/access/clients/{self.org.id}/google-ads/data'
-
-    def test_ambiguous_without_account_id(self):
-        res = self.client.get(self.url())
-        self.assertEqual(res.status_code, 400)
-        self.assertCountEqual(res.json()['accounts'], self.accounts)
-
-    def test_targeted_account(self):
-        res = self.client.get(self.url(), {'account_id': self.accounts[0]})
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json()['account_id'], self.accounts[0])
-
-    def test_unknown_account(self):
-        res = self.client.get(self.url(), {'account_id': '9999999999'})
-        self.assertEqual(res.status_code, 404)
-
-
-class GrantRequestTests(APITestCase):
-    def setUp(self):
-        self.org = ClientOrg.objects.create(name='Acme', slug='acme')
-        self.provider = Provider.objects.create(slug='shopify', name='Shopify', is_mock=True)
-        self.admin = User.objects.create_user(username='admin', password='x',
-                                               role=User.Role.ADMIN, is_staff=True)
-        self.dev = User.objects.create_user(username='dev', password='x',
-                                            role=User.Role.DEVELOPER)
-        self.consumer, _ = Consumer.create_with_key('proj', self.dev)
-
-    def test_dev_request_then_admin_approve_creates_grant(self):
-        from .models import GrantRequest
+    def test_multi_account_ambiguous_then_targeted(self):
+        cred = make_connection(self.org, self.provider, '111')
+        make_connection(self.org, self.provider, '222', cred=cred)
         self.client.force_authenticate(self.dev)
-        res = self.client.post('/api/access/grant-requests/', {
-            'consumer': self.consumer.id, 'client_org': self.org.id,
-            'provider': self.provider.id, 'scopes': ['read']}, format='json')
+        self.assertEqual(self.client.get(self.data_url()).status_code, 400)
+        self.assertEqual(self.client.get(self.data_url('?account_id=111')).status_code, 200)
+
+
+class ProjectRequestTests(APITestCase):
+    def setUp(self):
+        self.org = ClientOrg.objects.create(name='Acme', slug='acme')
+        self.admin = User.objects.create_user('admin', password='x', role=User.Role.ADMIN)
+        self.dev = User.objects.create_user('dev', password='x', role=User.Role.DEVELOPER)
+        self.project, _ = Consumer.create_with_key('proj', client_org=self.org, owner=self.admin)
+
+    def test_request_then_approve_adds_member(self):
+        self.client.force_authenticate(self.dev)
+        res = self.client.post('/api/access/project-requests/',
+                               {'consumer': self.project.id}, format='json')
         self.assertEqual(res.status_code, 201)
         req_id = res.json()['id']
-
         self.client.force_authenticate(self.admin)
-        approve = self.client.post(f'/api/access/grant-requests/{req_id}/approve/')
+        approve = self.client.post(f'/api/access/project-requests/{req_id}/approve/')
         self.assertEqual(approve.status_code, 200)
-        self.assertTrue(Grant.objects.filter(
-            consumer=self.consumer, client_org=self.org, provider=self.provider,
-            active=True).exists())
-        self.assertEqual(GrantRequest.objects.get(id=req_id).status, 'approved')
+        self.assertTrue(self.project.members.filter(id=self.dev.id).exists())
+        self.assertEqual(ProjectAccessRequest.objects.get(id=req_id).status, 'approved')
 
     def test_dev_cannot_approve(self):
-        from .models import GrantRequest
-        gr = GrantRequest.objects.create(consumer=self.consumer, client_org=self.org,
-                                         provider=self.provider, requested_by=self.dev)
+        req = ProjectAccessRequest.objects.create(consumer=self.project, requested_by=self.dev)
         self.client.force_authenticate(self.dev)
-        res = self.client.post(f'/api/access/grant-requests/{gr.id}/approve/')
+        res = self.client.post(f'/api/access/project-requests/{req.id}/approve/')
         self.assertEqual(res.status_code, 403)

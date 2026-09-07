@@ -15,11 +15,21 @@ def hash_api_key(raw: str) -> str:
 
 
 class Consumer(models.Model):
-    """A developer project identity that calls the Access API with an API key."""
+    """A **project**: an API-key identity bound to ONE client, usable by its
+    assigned developer members. Holding the key (or being a member) grants access
+    to any of that client's connected platforms."""
 
     name = models.CharField(max_length=120)
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='consumers'
+    client_org = models.ForeignKey(
+        'users.ClientOrg', null=True, blank=True, on_delete=models.CASCADE,
+        related_name='projects',
+    )
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='member_projects'
+    )
+    owner = models.ForeignKey(  # creator (record only); access is via members/key
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_projects',
     )
     api_key_hash = models.CharField(max_length=64, unique=True)
     api_key_prefix = models.CharField(max_length=16, blank=True)
@@ -30,10 +40,11 @@ class Consumer(models.Model):
         ordering = ['-created_at']
 
     @classmethod
-    def create_with_key(cls, name, owner):
+    def create_with_key(cls, name, client_org=None, owner=None):
         raw = generate_api_key()
         consumer = cls.objects.create(
             name=name,
+            client_org=client_org,
             owner=owner,
             api_key_hash=hash_api_key(raw),
             api_key_prefix=raw[:12],
@@ -52,40 +63,9 @@ class Consumer(models.Model):
         return f'{self.name} ({self.api_key_prefix}…)'
 
 
-class Grant(models.Model):
-    """Authorizes a consumer to access a client org's provider connection.
-
-    This is the deliberate gate: without an active grant, a consumer gets 403.
-    """
-
-    consumer = models.ForeignKey(Consumer, on_delete=models.CASCADE, related_name='grants')
-    client_org = models.ForeignKey(
-        'users.ClientOrg', on_delete=models.CASCADE, related_name='grants'
-    )
-    provider = models.ForeignKey(
-        'providers.Provider', on_delete=models.CASCADE, related_name='grants'
-    )
-    scopes = models.JSONField(default=list, blank=True)
-    active = models.BooleanField(default=True)
-    granted_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-created_at']
-        unique_together = ('consumer', 'client_org', 'provider')
-
-    def __str__(self):
-        return f'{self.consumer} → {self.client_org}/{self.provider}'
-
-
-class GrantRequest(models.Model):
-    """A developer's self-serve request for a grant; an admin approves or denies.
-
-    Approving creates the corresponding Grant. Keeps onboarding self-serve while
-    the grant itself remains the admin-gated access decision.
-    """
+class ProjectAccessRequest(models.Model):
+    """A developer's self-serve request to join a project. Approving adds them
+    to the project's members."""
 
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
@@ -93,24 +73,17 @@ class GrantRequest(models.Model):
         DENIED = 'denied', 'Denied'
 
     consumer = models.ForeignKey(
-        Consumer, on_delete=models.CASCADE, related_name='grant_requests'
+        Consumer, on_delete=models.CASCADE, related_name='access_requests'
     )
-    client_org = models.ForeignKey(
-        'users.ClientOrg', on_delete=models.CASCADE, related_name='grant_requests'
-    )
-    provider = models.ForeignKey(
-        'providers.Provider', on_delete=models.CASCADE, related_name='grant_requests'
-    )
-    scopes = models.JSONField(default=list, blank=True)
     message = models.TextField(blank=True)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
-        related_name='grant_requests',
+        related_name='project_requests',
     )
     decided_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
-        related_name='grant_decisions',
+        related_name='project_decisions',
     )
     decided_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -119,7 +92,7 @@ class GrantRequest(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.consumer} → {self.client_org}/{self.provider} [{self.status}]'
+        return f'{self.requested_by} → {self.consumer} [{self.status}]'
 
 
 class AuditLog(models.Model):

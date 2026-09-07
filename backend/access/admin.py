@@ -1,24 +1,19 @@
 from django.contrib import admin
 
-from .models import AuditLog, Consumer, Grant, GrantRequest
+from .models import AuditLog, Consumer, ProjectAccessRequest
 
 
 @admin.register(Consumer)
 class ConsumerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'owner', 'api_key_prefix', 'active', 'created_at')
-    list_filter = ('active',)
+    list_display = ('name', 'client_org', 'api_key_prefix', 'active', 'created_at')
+    list_filter = ('active', 'client_org')
+    filter_horizontal = ('members',)
 
 
-@admin.register(Grant)
-class GrantAdmin(admin.ModelAdmin):
-    list_display = ('consumer', 'client_org', 'provider', 'active', 'created_at')
-    list_filter = ('active', 'provider')
-
-
-@admin.register(GrantRequest)
-class GrantRequestAdmin(admin.ModelAdmin):
-    list_display = ('consumer', 'client_org', 'provider', 'status', 'requested_by', 'created_at')
-    list_filter = ('status', 'provider')
+@admin.register(ProjectAccessRequest)
+class ProjectAccessRequestAdmin(admin.ModelAdmin):
+    list_display = ('consumer', 'requested_by', 'status', 'created_at')
+    list_filter = ('status',)
 
 
 @admin.register(AuditLog)

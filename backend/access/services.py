@@ -1,6 +1,6 @@
 """Access-control helpers shared by the Access API views."""
 
-from .models import AuditLog, Consumer, Grant
+from .models import AuditLog, Consumer
 
 
 def actor_info(request):
@@ -12,24 +12,23 @@ def actor_info(request):
     return 'user', getattr(user, 'username', 'unknown'), None
 
 
-def has_access(request, org, provider, scope=None) -> bool:
-    """Consumers need an active grant covering `scope`; internal humans (dev/admin) pass.
+def has_access(request, org, provider=None) -> bool:
+    """Project-centric: access is granted per client (all its connected platforms).
 
-    A grant with empty `scopes` means full access (backward compatible with
-    seeded grants). Otherwise the requested `scope` must be listed.
+    - API-key project: allowed if the project is active and bound to this client.
+    - Admin: always. Developer: allowed if a member of any project for this client.
     """
     _, _, consumer = actor_info(request)
     if consumer is not None:
-        grant = Grant.objects.filter(
-            consumer=consumer, client_org=org, provider=provider, active=True
-        ).first()
-        if grant is None:
-            return False
-        if scope and grant.scopes:
-            return scope in grant.scopes
-        return True
+        return bool(consumer.active and consumer.client_org_id == org.id)
     user = request.user
-    return bool(user and user.is_authenticated and (user.is_developer_role or user.is_admin_role))
+    if not (user and user.is_authenticated):
+        return False
+    if user.is_admin_role:
+        return True
+    if user.is_developer_role:
+        return Consumer.objects.filter(client_org=org, members=user).exists()
+    return False
 
 
 def write_audit(request, action, org=None, provider=None, status='ok', meta=None):

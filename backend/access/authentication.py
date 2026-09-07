@@ -32,7 +32,10 @@ class ApiKeyAuthentication(authentication.BaseAuthentication):
         except Consumer.DoesNotExist:
             raise exceptions.AuthenticationFailed('Invalid or inactive API key.')
 
-        if not consumer.owner.is_active:
-            raise exceptions.AuthenticationFailed('Consumer owner is inactive.')
+        # request.user just needs to be an authenticated user; access is enforced
+        # via request.auth (the project) in has_access.
+        principal = consumer.owner or consumer.members.filter(is_active=True).first()
+        if principal is None or not principal.is_active:
+            raise exceptions.AuthenticationFailed('Project has no active user.')
 
-        return (consumer.owner, consumer)
+        return (principal, consumer)

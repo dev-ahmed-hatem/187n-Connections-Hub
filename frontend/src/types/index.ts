@@ -70,25 +70,45 @@ export interface ClientOrg {
 export interface Consumer {
   id: number
   name: string
-  owner: number
-  owner_username: string
+  client_org: number | null
+  client_org_name?: string
+  members: number[]
+  member_usernames?: string[]
   api_key_prefix: string
   active: boolean
   created_at: string
   api_key?: string // present only on creation
 }
 
-export interface Grant {
+export interface ProjectAccessGroup {
+  provider: Provider
+  accounts: Account[]
+}
+
+export interface ProjectAccess {
+  consumer: number
+  consumer_name: string
+  client_org: number | null
+  client_org_name: string | null
+  platforms: ProjectAccessGroup[]
+}
+
+export interface RequestableProject {
+  id: number
+  name: string
+  client_org_name: string | null
+}
+
+export interface ProjectAccessRequest {
   id: number
   consumer: number
   consumer_name: string
-  client_org: number
-  client_org_name: string
-  provider: number
-  provider_name: string
-  provider_slug: string
-  scopes: string[]
-  active: boolean
+  client_org_name?: string
+  message: string
+  status: 'pending' | 'approved' | 'denied'
+  requested_by: number | null
+  requested_by_username?: string
+  decided_at: string | null
   created_at: string
 }
 
@@ -129,41 +149,6 @@ export interface ConnectionRequest {
   status: 'pending' | 'connected' | 'declined'
   created_at: string
   resolved_at: string | null
-}
-
-export interface GrantRequest {
-  id: number
-  consumer: number
-  consumer_name: string
-  client_org: number
-  client_org_name: string
-  provider: number
-  provider_name: string
-  provider_slug: string
-  scopes: string[]
-  message: string
-  status: 'pending' | 'approved' | 'denied'
-  requested_by: number | null
-  requested_by_username?: string
-  decided_at: string | null
-  created_at: string
-}
-
-export interface ConsumerAccessItem {
-  grant_id: number
-  client_org: number
-  client_org_name: string
-  provider: string
-  provider_name: string
-  scopes: string[]
-  external_account_id: string | null
-  connection_status: ConnectionStatus
-}
-
-export interface ConsumerAccess {
-  consumer: number
-  consumer_name: string
-  access: ConsumerAccessItem[]
 }
 
 export interface DashboardSummary {

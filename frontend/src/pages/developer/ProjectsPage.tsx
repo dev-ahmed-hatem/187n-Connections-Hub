@@ -1,9 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   App,
   Button,
   Card,
-  Checkbox,
   Drawer,
   Empty,
   Form,
@@ -15,203 +14,216 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { KeyOutlined, PlusOutlined, ReloadOutlined, SafetyOutlined } from '@ant-design/icons'
+import { KeyOutlined, ReloadOutlined, SafetyOutlined } from '@ant-design/icons'
 
 import {
-  useConsumerAccessQuery,
   useConsumersQuery,
-  useCreateConsumerMutation,
-  useCreateGrantRequestMutation,
-  useGrantRequestsQuery,
+  useCreateProjectRequestMutation,
+  useFetchTokenMutation,
+  usePreviewDataMutation,
+  useProjectAccessQuery,
+  useRequestableProjectsQuery,
+  useProjectRequestsQuery,
   useRotateKeyMutation,
 } from '@/app/api/endpoints/access'
-import { useOrgsQuery, useProvidersQuery } from '@/app/api/endpoints/catalog'
+import { useTestConnectionMutation } from '@/app/api/endpoints/connections'
+import ProviderIcon from '@/components/ProviderIcon'
 import type { Consumer } from '@/types'
 
 const { Title, Text, Paragraph } = Typography
 
 const STATUS_COLOR: Record<string, string> = {
-  connected: 'green',
-  needs_reconnect: 'gold',
-  not_connected: 'default',
+  connected: 'green', needs_reconnect: 'gold', not_connected: 'default',
 }
 
 export default function ProjectsPage() {
-  const { data: consumers, isLoading } = useConsumersQuery()
-  const { data: requests } = useGrantRequestsQuery()
-  const { data: orgs } = useOrgsQuery()
-  const { data: providers } = useProvidersQuery()
-  const [createConsumer, { isLoading: creating }] = useCreateConsumerMutation()
+  const { data: projects, isLoading } = useConsumersQuery()
+  const { data: requests } = useProjectRequestsQuery()
+  const { data: requestable } = useRequestableProjectsQuery()
   const [rotateKey] = useRotateKeyMutation()
-  const [createRequest, { isLoading: requesting }] = useCreateGrantRequestMutation()
+  const [createRequest, { isLoading: requesting }] = useCreateProjectRequestMutation()
   const { message, modal } = App.useApp()
 
-  const [createForm] = Form.useForm()
-  const [requestForm] = Form.useForm()
-  const [createOpen, setCreateOpen] = useState(false)
+  const [clientFilter, setClientFilter] = useState<string | undefined>()
+  const [openProject, setOpenProject] = useState<Consumer | null>(null)
   const [requestOpen, setRequestOpen] = useState(false)
-  const [accessFor, setAccessFor] = useState<Consumer | null>(null)
+  const [reqForm] = Form.useForm()
 
-  const showKey = (title: string, key: string) =>
-    modal.success({
-      title,
-      content: (
-        <div>
-          <Paragraph>Copy this key now — it is shown only once:</Paragraph>
-          <Paragraph copyable code style={{ wordBreak: 'break-all' }}>{key}</Paragraph>
-        </div>
-      ),
-    })
+  const clients = useMemo(
+    () => [...new Set((projects ?? []).map((p) => p.client_org_name).filter(Boolean))] as string[],
+    [projects],
+  )
+  const rows = (projects ?? []).filter((p) => !clientFilter || p.client_org_name === clientFilter)
+  const pending = (requests ?? []).filter((r) => r.status === 'pending')
 
-  const onCreate = async (v: { name: string }) => {
-    try {
-      const c = await createConsumer(v).unwrap()
-      setCreateOpen(false); createForm.resetFields()
-      showKey('API key created', c.api_key!)
-    } catch { message.error('Could not create the project.') }
-  }
+  const showKey = (key: string) => modal.success({
+    title: 'New API key',
+    content: <Paragraph copyable code style={{ wordBreak: 'break-all' }}>{key}</Paragraph>,
+  })
 
-  const onRotate = (c: Consumer) =>
-    modal.confirm({
-      title: `Rotate key for "${c.name}"?`,
-      content: 'The current key stops working immediately.',
-      onOk: async () => {
-        const updated = await rotateKey(c.id).unwrap()
-        showKey('New API key', updated.api_key!)
-      },
-    })
+  const onRotate = (p: Consumer) => modal.confirm({
+    title: `Rotate key for "${p.name}"?`,
+    content: 'The current key stops working immediately.',
+    onOk: async () => showKey((await rotateKey(p.id).unwrap()).api_key!),
+  })
 
-  const onRequest = async (v: { consumer: number; client_org: number; provider: number; scopes: string[]; message?: string }) => {
+  const onRequest = async (v: { consumer: number; message?: string }) => {
     try {
       await createRequest(v).unwrap()
-      setRequestOpen(false); requestForm.resetFields()
+      setRequestOpen(false); reqForm.resetFields()
       message.success('Access request sent for approval.')
-    } catch { message.error('Could not send the request (it may already exist).') }
+    } catch { message.error('Could not send the request.') }
   }
 
   const columns = [
     { title: 'Project', dataIndex: 'name', key: 'name' },
-    { title: 'Key', key: 'key', render: (_: unknown, c: Consumer) => <Text code>{c.api_key_prefix}…</Text> },
-    {
-      title: 'Status', key: 'active',
-      render: (_: unknown, c: Consumer) => c.active ? <Tag color="green">active</Tag> : <Tag>inactive</Tag>,
-    },
+    { title: 'Client', dataIndex: 'client_org_name', key: 'client',
+      render: (v: string) => v || <Text type="secondary">—</Text> },
+    { title: 'Key', key: 'key', render: (_: unknown, p: Consumer) => <Text code>{p.api_key_prefix}…</Text> },
+    { title: 'Status', key: 'active',
+      render: (_: unknown, p: Consumer) => p.active ? <Tag color="green">active</Tag> : <Tag>inactive</Tag> },
     {
       title: 'Actions', key: 'actions',
-      render: (_: unknown, c: Consumer) => (
+      render: (_: unknown, p: Consumer) => (
         <Space>
-          <Button size="small" icon={<SafetyOutlined />} onClick={() => setAccessFor(c)}>Access</Button>
-          <Button size="small" icon={<ReloadOutlined />} onClick={() => onRotate(c)}>Rotate key</Button>
+          <Button size="small" icon={<SafetyOutlined />} onClick={() => setOpenProject(p)}>Open</Button>
+          <Button size="small" icon={<ReloadOutlined />} onClick={() => onRotate(p)}>Rotate key</Button>
         </Space>
       ),
     },
   ]
 
-  const pending = (requests ?? []).filter((r) => r.status === 'pending')
-
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <Title level={3} style={{ marginBottom: 4 }}>My projects</Title>
           <Text type="secondary">
-            Each project has its own API key and reaches only the clients an admin has approved.
+            Open a project to fetch keys/data for its client's connected platforms.
           </Text>
         </div>
-        <Space>
-          <Button icon={<KeyOutlined />} onClick={() => setRequestOpen(true)}>Request access</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>New project</Button>
-        </Space>
+        <Button icon={<KeyOutlined />} onClick={() => setRequestOpen(true)}>Request access</Button>
       </div>
 
-      <Card title="Projects">
-        <Table rowKey="id" loading={isLoading} dataSource={consumers} columns={columns}
+      {clients.length > 0 && (
+        <Select allowClear placeholder="Filter by client" style={{ minWidth: 240 }}
+          value={clientFilter} onChange={setClientFilter}
+          options={clients.map((c) => ({ value: c, label: c }))} />
+      )}
+
+      <Card>
+        <Table rowKey="id" loading={isLoading} dataSource={rows} columns={columns}
           pagination={false}
-          locale={{ emptyText: <Empty description="No projects yet — create one to get an API key" /> }} />
+          locale={{ emptyText: <Empty description="No projects yet — request access to one" /> }} />
       </Card>
 
-      <Card title="My access requests">
-        {pending.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No pending requests" />
-        ) : (
+      {pending.length > 0 && (
+        <Card title="My pending access requests">
           <Space direction="vertical" style={{ width: '100%' }}>
             {pending.map((r) => (
-              <Text key={r.id}>
-                <Tag color="gold">pending</Tag>
-                <b>{r.consumer_name}</b> → {r.client_org_name} · {r.provider_name}
-              </Text>
+              <Text key={r.id}><Tag color="gold">pending</Tag> {r.consumer_name}
+                {r.client_org_name ? ` · ${r.client_org_name}` : ''}</Text>
             ))}
           </Space>
-        )}
-      </Card>
+        </Card>
+      )}
 
-      {/* Access drill-down */}
-      <Drawer title={accessFor ? `Access · ${accessFor.name}` : ''} open={!!accessFor}
-        onClose={() => setAccessFor(null)} width={480}>
-        {accessFor && <AccessList consumerId={accessFor.id} />}
+      <Drawer title={openProject ? `Project · ${openProject.name}` : ''} open={!!openProject}
+        onClose={() => setOpenProject(null)} width={520}>
+        {openProject && <ProjectPanel project={openProject} />}
       </Drawer>
 
-      {/* Create project */}
-      <Modal title="New project" open={createOpen} onCancel={() => setCreateOpen(false)}
-        onOk={() => createForm.submit()} confirmLoading={creating} okText="Create">
-        <Form form={createForm} layout="vertical" onFinish={onCreate}>
-          <Form.Item name="name" label="Project name" rules={[{ required: true }]}>
-            <Input placeholder="e.g. shopify-operator" />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* Request access */}
-      <Modal title="Request access" open={requestOpen} onCancel={() => setRequestOpen(false)}
-        onOk={() => requestForm.submit()} confirmLoading={requesting} okText="Send request">
-        <Form form={requestForm} layout="vertical" onFinish={onRequest}
-          initialValues={{ scopes: ['read', 'token'] }}>
+      <Modal title="Request project access" open={requestOpen} onCancel={() => setRequestOpen(false)}
+        onOk={() => reqForm.submit()} confirmLoading={requesting} okText="Send request">
+        <Form form={reqForm} layout="vertical" onFinish={onRequest}>
           <Form.Item name="consumer" label="Project" rules={[{ required: true }]}>
-            <Select options={(consumers ?? []).map((c) => ({ value: c.id, label: c.name }))} />
+            <Select showSearch optionFilterProp="label"
+              options={(requestable ?? []).map((p) => ({
+                value: p.id, label: `${p.name}${p.client_org_name ? ` · ${p.client_org_name}` : ''}` }))} />
           </Form.Item>
-          <Form.Item name="client_org" label="Client" rules={[{ required: true }]}>
-            <Select options={(orgs ?? []).map((o) => ({ value: o.id, label: o.name }))} />
-          </Form.Item>
-          <Form.Item name="provider" label="Platform" rules={[{ required: true }]}>
-            <Select options={(providers ?? []).map((p) => ({ value: p.id, label: p.name }))} />
-          </Form.Item>
-          <Form.Item name="scopes" label="Scopes">
-            <Checkbox.Group options={[
-              { label: 'Read data', value: 'read' },
-              { label: 'Fetch token', value: 'token' },
-            ]} />
-          </Form.Item>
-          <Form.Item name="message" label="Message (optional)">
-            <Input.TextArea rows={2} placeholder="Why you need access" />
-          </Form.Item>
+          <Form.Item name="message" label="Message (optional)"><Input.TextArea rows={2} /></Form.Item>
         </Form>
       </Modal>
     </Space>
   )
 }
 
-function AccessList({ consumerId }: { consumerId: number }) {
-  const { data, isLoading } = useConsumerAccessQuery(consumerId)
+function ProjectPanel({ project }: { project: Consumer }) {
+  const { data, isLoading } = useProjectAccessQuery(project.id)
+  const [previewData, { isLoading: previewing }] = usePreviewDataMutation()
+  const [fetchToken, { isLoading: tokening }] = useFetchTokenMutation()
+  const [testConnection] = useTestConnectionMutation()
+  const { message } = App.useApp()
+  const [result, setResult] = useState<{ title: string; body: unknown } | null>(null)
+  const [testingId, setTestingId] = useState<number | null>(null)
+
+  const orgId = data?.client_org ?? undefined
+
+  const preview = async (provider: string, accountId: string) => {
+    try {
+      const d = await previewData({ orgId: orgId!, provider, accountId }).unwrap()
+      setResult({ title: `Data · ${provider}`, body: d })
+    } catch (e) { message.error(errText(e)) }
+  }
+  const token = async (provider: string, accountId: string) => {
+    try {
+      const d = await fetchToken({ orgId: orgId!, provider, accountId }).unwrap()
+      setResult({ title: `Token · ${provider}`, body: d })
+    } catch (e) { message.error(errText(e)) }
+  }
+  const test = async (id: number) => {
+    setTestingId(id)
+    try {
+      const r = await testConnection(id).unwrap()
+      r.ok ? message.success('Healthy.') : message.warning('Needs reconnect.')
+    } finally { setTestingId(null) }
+  }
+
   if (isLoading) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Loading…" />
-  if (!data?.access.length)
-    return <Empty description="No access yet — request access to a client/platform" />
+
   return (
-    <Space direction="vertical" style={{ width: '100%' }}>
-      {data.access.map((a) => (
-        <Card key={a.grant_id} size="small">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontWeight: 600 }}>{a.client_org_name}</div>
-              <Text type="secondary">
-                {a.provider_name}{a.external_account_id ? ` · ${a.external_account_id}` : ''}
-              </Text>
-            </div>
-            <Tag color={STATUS_COLOR[a.connection_status] ?? 'default'}>
-              {a.connection_status.replace('_', ' ')}
-            </Tag>
-          </div>
+    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Text type="secondary">Client: <b>{data?.client_org_name || '—'}</b> · key <Text code>{project.api_key_prefix}…</Text></Text>
+      {data?.platforms.map((g) => (
+        <Card key={g.provider.id} size="small"
+          title={<Space><ProviderIcon provider={g.provider} />{g.provider.name}</Space>}>
+          {g.accounts.length === 0 ? (
+            <Text type="secondary">Not connected</Text>
+          ) : (
+            <Space direction="vertical" style={{ width: '100%' }} size={8}>
+              {g.accounts.map((a) => (
+                <div key={a.connection_id} style={{ display: 'flex', alignItems: 'center', gap: 8,
+                  justifyContent: 'space-between' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>{a.external_account_id}</div>
+                    <Tag color={STATUS_COLOR[a.status] ?? 'default'}>{a.status.replace('_', ' ')}</Tag>
+                  </div>
+                  {a.status === 'connected' && (
+                    <Space size={4}>
+                      <Button size="small" loading={previewing}
+                        onClick={() => preview(g.provider.slug, a.external_account_id)}>Data</Button>
+                      <Button size="small" loading={tokening}
+                        onClick={() => token(g.provider.slug, a.external_account_id)}>Token</Button>
+                      <Button size="small" loading={testingId === a.connection_id}
+                        onClick={() => test(a.connection_id)}>Test</Button>
+                    </Space>
+                  )}
+                </div>
+              ))}
+            </Space>
+          )}
         </Card>
       ))}
+
+      <Modal title={result?.title} open={!!result} onCancel={() => setResult(null)} footer={null}>
+        <pre style={{ background: 'rgba(128,128,128,0.12)', padding: 12, borderRadius: 8,
+          overflow: 'auto' }}>{JSON.stringify(result?.body, null, 2)}</pre>
+      </Modal>
     </Space>
   )
+}
+
+function errText(e: unknown): string {
+  const err = e as { data?: { detail?: string } }
+  return err?.data?.detail || 'Request failed.'
 }

@@ -51,13 +51,9 @@ export default function DashboardPage() {
         <>
           <Row gutter={[16, 16]}>
             <Col xs={12} md={6}><StatCard label="Clients" value={d.clients as number} to="/admin/orgs" /></Col>
-            <Col xs={12} md={6}><StatCard label="Projects" value={d.consumers as number} /></Col>
-            <Col xs={12} md={6}><StatCard label="Active grants" value={d.active_grants as number} to="/admin/grants" /></Col>
+            <Col xs={12} md={6}><StatCard label="Projects" value={d.projects as number} to="/admin/projects" /></Col>
             <Col xs={12} md={6}><StatCard label="Pending requests" value={d.pending_requests as number} to="/admin/approvals" /></Col>
-          </Row>
-          <Row gutter={[16, 16]}>
             <Col xs={12} md={6}><StatCard label="Live providers" value={d.providers_live as number} /></Col>
-            <Col xs={12} md={6}><StatCard label="Mock providers" value={d.providers_mock as number} /></Col>
           </Row>
           <Card title="Connections by status">
             {statusChips(d.connections_by_status as Record<string, number>)}
@@ -80,7 +76,6 @@ export default function DashboardPage() {
       {data.role === 'developer' && (
         <Row gutter={[16, 16]}>
           <Col xs={12} md={8}><StatCard label="My projects" value={d.my_projects as number} to="/dev/projects" /></Col>
-          <Col xs={12} md={8}><StatCard label="Active grants" value={d.my_active_grants as number} to="/dev/projects" /></Col>
           <Col xs={12} md={8}><StatCard label="Pending requests" value={d.my_pending_requests as number} to="/dev/projects" /></Col>
         </Row>
       )}

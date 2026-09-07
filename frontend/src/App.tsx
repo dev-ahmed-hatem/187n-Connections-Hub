@@ -8,11 +8,10 @@ import DashboardPage from '@/pages/dashboard/DashboardPage'
 import ClientMessagesPage from '@/pages/staff/ClientMessagesPage'
 import ClientConnectionsPage from '@/pages/client/ClientConnectionsPage'
 import ClientUpdatesPage from '@/pages/client/ClientUpdatesPage'
-import DevAccessPage from '@/pages/developer/DevAccessPage'
 import ProjectsPage from '@/pages/developer/ProjectsPage'
 import QuickstartPage from '@/pages/developer/QuickstartPage'
 import AdminApprovalsPage from '@/pages/admin/AdminApprovalsPage'
-import AdminGrantsPage from '@/pages/admin/AdminGrantsPage'
+import AdminProjectsPage from '@/pages/admin/AdminProjectsPage'
 import AdminOrgsPage from '@/pages/admin/AdminOrgsPage'
 import AdminAnnouncementsPage from '@/pages/admin/AdminAnnouncementsPage'
 import AdminAuditPage from '@/pages/admin/AdminAuditPage'
@@ -32,8 +31,6 @@ export default function App() {
         <Route path="client/updates" element={
           <RequireRole roles={['client']}><ClientUpdatesPage /></RequireRole>} />
 
-        <Route path="dev/access" element={
-          <RequireRole roles={['developer']}><DevAccessPage /></RequireRole>} />
         <Route path="dev/projects" element={
           <RequireRole roles={['developer']}><ProjectsPage /></RequireRole>} />
         <Route path="dev/quickstart" element={
@@ -41,8 +38,8 @@ export default function App() {
 
         <Route path="admin/approvals" element={
           <RequireRole roles={['admin']}><AdminApprovalsPage /></RequireRole>} />
-        <Route path="admin/grants" element={
-          <RequireRole roles={['admin']}><AdminGrantsPage /></RequireRole>} />
+        <Route path="admin/projects" element={
+          <RequireRole roles={['admin']}><AdminProjectsPage /></RequireRole>} />
         <Route path="admin/orgs" element={
           <RequireRole roles={['admin']}><AdminOrgsPage /></RequireRole>} />
         <Route path="admin/announcements" element={

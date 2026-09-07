@@ -5,7 +5,7 @@ from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from access.models import AuditLog, Consumer, Grant, GrantRequest
+from access.models import AuditLog, Consumer, ProjectAccessRequest
 from connections.models import Connection
 from portal.models import ConnectionRequest, Note
 from providers.models import Provider
@@ -38,10 +38,9 @@ class DashboardView(APIView):
             'clients': ClientOrg.objects.count(),
             'providers_live': Provider.objects.filter(is_mock=False, is_active=True).count(),
             'providers_mock': Provider.objects.filter(is_mock=True, is_active=True).count(),
-            'consumers': Consumer.objects.count(),
-            'active_grants': Grant.objects.filter(active=True).count(),
-            'pending_requests': GrantRequest.objects.filter(
-                status=GrantRequest.Status.PENDING).count(),
+            'projects': Consumer.objects.count(),
+            'pending_requests': ProjectAccessRequest.objects.filter(
+                status=ProjectAccessRequest.Status.PENDING).count(),
             'connections_by_status': _status_counts(Connection.objects.all()),
             'recent_audit': [
                 {'actor': a.actor_label, 'action': a.action, 'status': a.status,
@@ -54,12 +53,11 @@ class DashboardView(APIView):
     def _developer(self, user):
         return {
             'role': 'developer',
-            'my_projects': Consumer.objects.filter(owner=user).count(),
-            'my_active_grants': Grant.objects.filter(consumer__owner=user, active=True).count(),
-            'my_pending_requests': GrantRequest.objects.filter(
-                requested_by=user, status=GrantRequest.Status.PENDING).count(),
+            'my_projects': Consumer.objects.filter(members=user).count(),
+            'my_pending_requests': ProjectAccessRequest.objects.filter(
+                requested_by=user, status=ProjectAccessRequest.Status.PENDING).count(),
             'projects': list(
-                Consumer.objects.filter(owner=user).values('id', 'name', 'active')),
+                Consumer.objects.filter(members=user).values('id', 'name', 'active')),
         }
 
     def _client(self, user):

@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import { Button, Dropdown, Layout, Menu, Tag, Tooltip, Typography, theme } from 'antd'
 import {
   ApiOutlined,
-  AppstoreOutlined,
   BellOutlined,
   BulbFilled,
   BulbOutlined,
@@ -37,7 +36,6 @@ const MENU: Record<Role, { key: string; label: string; icon: ReactNode }[]> = {
   ],
   developer: [
     { key: '/', label: 'Dashboard', icon: <DashboardOutlined /> },
-    { key: '/dev/access', label: 'Client access', icon: <AppstoreOutlined /> },
     { key: '/dev/projects', label: 'My projects', icon: <KeyOutlined /> },
     { key: '/staff/messages', label: 'Client messages', icon: <MessageOutlined /> },
     { key: '/dev/quickstart', label: 'Quickstart & API', icon: <ApiOutlined /> },
@@ -45,7 +43,7 @@ const MENU: Record<Role, { key: string; label: string; icon: ReactNode }[]> = {
   admin: [
     { key: '/', label: 'Dashboard', icon: <DashboardOutlined /> },
     { key: '/admin/approvals', label: 'Approvals', icon: <CheckSquareOutlined /> },
-    { key: '/admin/grants', label: 'Grants', icon: <SafetyCertificateOutlined /> },
+    { key: '/admin/projects', label: 'Projects', icon: <SafetyCertificateOutlined /> },
     { key: '/admin/orgs', label: 'Clients & users', icon: <TeamOutlined /> },
     { key: '/staff/messages', label: 'Client messages', icon: <MessageOutlined /> },
     { key: '/admin/audit', label: 'Audit log', icon: <FileTextOutlined /> },

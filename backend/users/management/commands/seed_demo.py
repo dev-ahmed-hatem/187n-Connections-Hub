@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from access.models import Consumer, Grant
+from access.models import Consumer
 from connections.models import Connection, ProviderCredential
 from portal.models import Announcement, ConnectionRequest, Note
 from providers.adapters import get_adapter
@@ -66,17 +66,17 @@ class Command(BaseCommand):
             for provider_slug, status in provider_map.items():
                 self._seed_connection(orgs[org_slug], providers[provider_slug], status)
 
-        # A demo consumer + grants (so the API-key path works out of the box)
-        consumer = Consumer.objects.filter(name='Demo Operator', owner=developer).first()
+        # A demo project bound to a client, with the developer as a member
+        # (so the API-key + member paths work out of the box).
+        consumer = Consumer.objects.filter(name='Demo Operator').first()
         raw_key = None
         if consumer is None:
-            consumer, raw_key = Consumer.create_with_key('Demo Operator', developer)
-        for provider_slug in ('google-ads', 'shopify'):
-            Grant.objects.update_or_create(
-                consumer=consumer, client_org=orgs['northwind-coffee'],
-                provider=providers[provider_slug],
-                defaults={'active': True, 'granted_by': admin, 'scopes': ['read']},
-            )
+            consumer, raw_key = Consumer.create_with_key(
+                'Demo Operator', client_org=orgs['northwind-coffee'], owner=admin)
+        else:
+            consumer.client_org = orgs['northwind-coffee']
+            consumer.save(update_fields=['client_org'])
+        consumer.members.add(developer)
 
         # Portal content
         Announcement.objects.update_or_create(

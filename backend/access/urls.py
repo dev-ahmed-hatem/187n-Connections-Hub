@@ -8,16 +8,14 @@ from .views import (
     AccessTokenView,
     AuditLogListView,
     ConsumerViewSet,
-    GrantRequestViewSet,
-    GrantViewSet,
+    ProjectAccessRequestViewSet,
 )
 
 app_name = 'access'
 
 router = DefaultRouter()
 router.register('consumers', ConsumerViewSet, basename='consumer')
-router.register('grants', GrantViewSet, basename='grant')
-router.register('grant-requests', GrantRequestViewSet, basename='grantrequest')
+router.register('project-requests', ProjectAccessRequestViewSet, basename='projectrequest')
 
 urlpatterns = [
     path('audit/', AuditLogListView.as_view(), name='audit'),

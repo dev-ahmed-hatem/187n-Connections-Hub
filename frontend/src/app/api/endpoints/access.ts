@@ -2,10 +2,10 @@ import { apiSlice } from '@/app/api/apiSlice'
 import type {
   AuditLog,
   Consumer,
-  ConsumerAccess,
-  Grant,
-  GrantRequest,
   Paginated,
+  ProjectAccess,
+  ProjectAccessRequest,
+  RequestableProject,
 } from '@/types'
 
 interface TokenResponse {
@@ -19,60 +19,60 @@ interface TokenResponse {
 
 export const accessApi = apiSlice.injectEndpoints({
   endpoints: (build) => ({
+    // --- Projects (consumers) ---
     consumers: build.query<Consumer[], void>({
       query: () => ({ url: '/access/consumers/', method: 'get' }),
       providesTags: ['Consumers'],
     }),
-    createConsumer: build.mutation<Consumer, { name: string }>({
+    createProject: build.mutation<
+      Consumer,
+      { name: string; client_org: number; members?: number[] }
+    >({
       query: (body) => ({ url: '/access/consumers/', method: 'post', data: body }),
       invalidatesTags: ['Consumers'],
     }),
-    deleteConsumer: build.mutation<void, number>({
-      query: (id) => ({ url: `/access/consumers/${id}/`, method: 'delete' }),
+    updateProject: build.mutation<
+      Consumer,
+      { id: number; client_org?: number; members?: number[]; active?: boolean }
+    >({
+      query: ({ id, ...body }) => ({ url: `/access/consumers/${id}/`, method: 'patch', data: body }),
       invalidatesTags: ['Consumers'],
     }),
     rotateKey: build.mutation<Consumer, number>({
       query: (id) => ({ url: `/access/consumers/${id}/rotate-key/`, method: 'post' }),
       invalidatesTags: ['Consumers'],
     }),
-    consumerAccess: build.query<ConsumerAccess, number>({
+    projectAccess: build.query<ProjectAccess, number>({
       query: (id) => ({ url: `/access/consumers/${id}/access/`, method: 'get' }),
-      providesTags: ['Grants', 'Connections'],
+      providesTags: ['Connections'],
     }),
-    grants: build.query<Grant[], void>({
-      query: () => ({ url: '/access/grants/', method: 'get' }),
-      providesTags: ['Grants'],
+    requestableProjects: build.query<RequestableProject[], void>({
+      query: () => ({ url: '/access/consumers/requestable/', method: 'get' }),
+      providesTags: ['Consumers'],
     }),
-    createGrant: build.mutation<
-      Grant,
-      { consumer: number; client_org: number; provider: number; scopes?: string[] }
-    >({
-      query: (body) => ({ url: '/access/grants/', method: 'post', data: body }),
-      invalidatesTags: ['Grants'],
-    }),
-    deleteGrant: build.mutation<void, number>({
-      query: (id) => ({ url: `/access/grants/${id}/`, method: 'delete' }),
-      invalidatesTags: ['Grants'],
-    }),
-    grantRequests: build.query<GrantRequest[], void>({
-      query: () => ({ url: '/access/grant-requests/', method: 'get' }),
+
+    // --- Project access requests ---
+    projectRequests: build.query<ProjectAccessRequest[], void>({
+      query: () => ({ url: '/access/project-requests/', method: 'get' }),
       providesTags: ['GrantRequests'],
     }),
-    createGrantRequest: build.mutation<
-      GrantRequest,
-      { consumer: number; client_org: number; provider: number; scopes?: string[]; message?: string }
+    createProjectRequest: build.mutation<
+      ProjectAccessRequest,
+      { consumer: number; message?: string }
     >({
-      query: (body) => ({ url: '/access/grant-requests/', method: 'post', data: body }),
+      query: (body) => ({ url: '/access/project-requests/', method: 'post', data: body }),
       invalidatesTags: ['GrantRequests'],
     }),
-    approveGrantRequest: build.mutation<GrantRequest, number>({
-      query: (id) => ({ url: `/access/grant-requests/${id}/approve/`, method: 'post' }),
-      invalidatesTags: ['GrantRequests', 'Grants'],
+    approveProjectRequest: build.mutation<ProjectAccessRequest, number>({
+      query: (id) => ({ url: `/access/project-requests/${id}/approve/`, method: 'post' }),
+      invalidatesTags: ['GrantRequests', 'Consumers'],
     }),
-    denyGrantRequest: build.mutation<GrantRequest, number>({
-      query: (id) => ({ url: `/access/grant-requests/${id}/deny/`, method: 'post' }),
+    denyProjectRequest: build.mutation<ProjectAccessRequest, number>({
+      query: (id) => ({ url: `/access/project-requests/${id}/deny/`, method: 'post' }),
       invalidatesTags: ['GrantRequests'],
     }),
+
+    // --- Audit ---
     audit: build.query<
       Paginated<AuditLog>,
       { page?: number; page_size?: number; status?: string; client_org?: number }
@@ -80,15 +80,16 @@ export const accessApi = apiSlice.injectEndpoints({
       query: (params) => ({ url: '/access/audit/', method: 'get', params }),
       providesTags: ['Audit'],
     }),
-    // Interactive developer-portal actions:
+
+    // --- Interactive access (dev portal) ---
     previewData: build.mutation<
       Record<string, unknown>,
-      { orgId: number; provider: string; accountId?: string }
+      { orgId: number; provider: string; accountId?: string; resource?: string }
     >({
-      query: ({ orgId, provider, accountId }) => ({
+      query: ({ orgId, provider, accountId, resource }) => ({
         url: `/access/clients/${orgId}/${provider}/data`,
         method: 'get',
-        params: accountId ? { account_id: accountId } : undefined,
+        params: { ...(accountId ? { account_id: accountId } : {}), ...(resource ? { resource } : {}) },
       }),
       invalidatesTags: ['Audit'],
     }),
@@ -119,17 +120,15 @@ export const accessApi = apiSlice.injectEndpoints({
 
 export const {
   useConsumersQuery,
-  useCreateConsumerMutation,
-  useDeleteConsumerMutation,
+  useCreateProjectMutation,
+  useUpdateProjectMutation,
   useRotateKeyMutation,
-  useConsumerAccessQuery,
-  useGrantsQuery,
-  useCreateGrantMutation,
-  useDeleteGrantMutation,
-  useGrantRequestsQuery,
-  useCreateGrantRequestMutation,
-  useApproveGrantRequestMutation,
-  useDenyGrantRequestMutation,
+  useProjectAccessQuery,
+  useRequestableProjectsQuery,
+  useProjectRequestsQuery,
+  useCreateProjectRequestMutation,
+  useApproveProjectRequestMutation,
+  useDenyProjectRequestMutation,
   useAuditQuery,
   usePreviewDataMutation,
   useFetchTokenMutation,

@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
@@ -12,42 +13,52 @@ from authentication.pagination import CustomPageNumberPagination
 from authentication.permissions import IsAdminRole, IsDeveloperRole
 from connections.models import Connection
 from connections.services import get_valid_access_token
+from portal.models import Notification
+from portal.notifications import notify
 from providers.adapters import get_adapter
 from providers.models import Provider
 from users.models import ClientOrg
 
-from .models import AuditLog, Consumer, Grant, GrantRequest
+from .models import AuditLog, Consumer, ProjectAccessRequest
 from .serializers import (
     AuditLogSerializer,
     ConsumerSerializer,
-    GrantRequestSerializer,
-    GrantSerializer,
+    ProjectAccessRequestSerializer,
 )
-from .services import actor_info, has_access, write_audit
+from .services import has_access, write_audit
 from .throttling import ConsumerRateThrottle
+
+User = get_user_model()
 
 
 class ConsumerViewSet(viewsets.ModelViewSet):
-    """Developer project identities. Devs manage their own; admins see all.
-
-    The raw API key is returned exactly once, on creation.
-    """
+    """Projects. Admins create & assign (client + members); developers see and use
+    the projects they're a member of. Raw API key is returned once on create/rotate."""
 
     serializer_class = ConsumerSerializer
-    permission_classes = [IsDeveloperRole]
+
+    def get_permissions(self):
+        if self.action in ('create', 'update', 'partial_update', 'destroy'):
+            return [IsAdminRole()]
+        return [IsDeveloperRole()]
 
     def get_queryset(self):
         user = self.request.user
-        qs = Consumer.objects.select_related('owner')
+        qs = Consumer.objects.select_related('client_org').prefetch_related('members')
         if user.is_admin_role:
             return qs
-        return qs.filter(owner=user)
+        return qs.filter(members=user)
 
     def create(self, request, *args, **kwargs):
         name = request.data.get('name')
-        if not name:
-            return Response({'detail': 'name is required.'}, status=400)
-        consumer, raw_key = Consumer.create_with_key(name=name, owner=request.user)
+        client_org = request.data.get('client_org')
+        if not name or not client_org:
+            return Response({'detail': 'name and client_org are required.'}, status=400)
+        org = get_object_or_404(ClientOrg, id=client_org)
+        consumer, raw_key = Consumer.create_with_key(name=name, client_org=org, owner=request.user)
+        members = request.data.get('members') or []
+        if members:
+            consumer.members.set(User.objects.filter(id__in=members))
         data = ConsumerSerializer(consumer).data
         data['api_key'] = raw_key  # shown once
         return Response(data, status=status.HTTP_201_CREATED)
@@ -55,121 +66,97 @@ class ConsumerViewSet(viewsets.ModelViewSet):
     @extend_schema(responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=['post'], url_path='rotate-key')
     def rotate_key(self, request, pk=None):
-        consumer = self.get_object()
+        consumer = self.get_object()  # dev limited to member projects by get_queryset
         raw_key = consumer.rotate_key()
         data = ConsumerSerializer(consumer).data
-        data['api_key'] = raw_key  # shown once; old key now invalid
+        data['api_key'] = raw_key
         return Response(data)
 
     @extend_schema(responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=['get'])
     def access(self, request, pk=None):
-        """This project's granted clients/platforms, each with live connection status."""
+        """This project's client + its connected platforms/accounts."""
         consumer = self.get_object()
-        grants = Grant.objects.filter(consumer=consumer, active=True).select_related(
-            'client_org', 'provider')
-        conns = {}
-        for c in Connection.objects.filter(
-            client_org__in=[g.client_org_id for g in grants]
-        ).select_related('provider'):
-            conns.setdefault((c.client_org_id, c.provider_id), []).append(c)
-        items = []
-        for g in grants:
-            grant_conns = conns.get((g.client_org_id, g.provider_id), [])
-            base = {
-                'grant_id': g.id,
-                'client_org': g.client_org_id,
-                'client_org_name': g.client_org.name,
-                'provider': g.provider.slug,
-                'provider_name': g.provider.name,
-                'scopes': g.scopes,
-            }
-            if grant_conns:
-                for c in grant_conns:
-                    items.append({**base,
-                                  'external_account_id': c.external_account_id,
-                                  'connection_status': c.status})
-            else:
-                items.append({**base, 'external_account_id': None,
-                              'connection_status': 'not_connected'})
-        return Response({'consumer': consumer.id, 'consumer_name': consumer.name, 'access': items})
+        org = consumer.client_org
+        by_provider = {}
+        if org:
+            for c in Connection.objects.filter(client_org=org).select_related('provider'):
+                by_provider.setdefault(c.provider_id, []).append(c)
+        platforms = []
+        for provider in Provider.objects.filter(is_active=True):
+            accounts = [{
+                'connection_id': c.id,
+                'external_account_id': c.external_account_id,
+                'display_name': c.display_name,
+                'status': c.status,
+            } for c in by_provider.get(provider.id, [])]
+            platforms.append({
+                'provider': {'id': provider.id, 'slug': provider.slug, 'name': provider.name,
+                             'short_code': provider.short_code, 'color': provider.color},
+                'accounts': accounts,
+            })
+        return Response({
+            'consumer': consumer.id, 'consumer_name': consumer.name,
+            'client_org': org.id if org else None,
+            'client_org_name': org.name if org else None,
+            'platforms': platforms,
+        })
+
+    @extend_schema(responses=OpenApiTypes.OBJECT)
+    @action(detail=False, methods=['get'])
+    def requestable(self, request):
+        """Active projects the current developer is not yet a member of."""
+        qs = Consumer.objects.filter(active=True).exclude(
+            members=request.user).select_related('client_org')
+        return Response([
+            {'id': c.id, 'name': c.name,
+             'client_org_name': c.client_org.name if c.client_org else None}
+            for c in qs
+        ])
 
 
-class GrantViewSet(viewsets.ModelViewSet):
-    """The access gate. Only admins create/revoke grants; devs may read theirs."""
+class ProjectAccessRequestViewSet(viewsets.ModelViewSet):
+    """Developers request to join a project; admins approve (adds them as a member) or deny."""
 
-    serializer_class = GrantSerializer
-
-    def get_permissions(self):
-        if self.request.method in permissions.SAFE_METHODS:
-            return [IsDeveloperRole()]
-        return [IsAdminRole()]
-
-    def get_queryset(self):
-        user = self.request.user
-        qs = Grant.objects.select_related('consumer', 'client_org', 'provider')
-        consumer_id = self.request.query_params.get('consumer')
-        if consumer_id:
-            qs = qs.filter(consumer_id=consumer_id)
-        if user.is_admin_role:
-            return qs
-        return qs.filter(consumer__owner=user)
-
-    def perform_create(self, serializer):
-        serializer.save(granted_by=self.request.user)
-
-
-class GrantRequestViewSet(viewsets.ModelViewSet):
-    """Self-serve access requests. Developers create/list their own; admins
-    approve (which creates the Grant) or deny."""
-
-    serializer_class = GrantRequestSerializer
+    serializer_class = ProjectAccessRequestSerializer
     permission_classes = [IsDeveloperRole]
 
     def get_queryset(self):
         user = self.request.user
-        qs = GrantRequest.objects.select_related(
-            'consumer', 'client_org', 'provider', 'requested_by'
-        )
+        qs = ProjectAccessRequest.objects.select_related(
+            'consumer', 'consumer__client_org', 'requested_by')
         if user.is_admin_role:
             return qs
-        return qs.filter(consumer__owner=user)
+        return qs.filter(requested_by=user)
 
     def perform_create(self, serializer):
-        consumer = serializer.validated_data['consumer']
-        user = self.request.user
-        if not user.is_admin_role and consumer.owner_id != user.id:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('You can only request access for your own projects.')
-        serializer.save(requested_by=user, status=GrantRequest.Status.PENDING)
+        serializer.save(requested_by=self.request.user,
+                        status=ProjectAccessRequest.Status.PENDING)
+
+    def _decide(self, request, pk, status_value, add_member):
+        req = self.get_object()
+        if req.status != ProjectAccessRequest.Status.PENDING:
+            return Response({'detail': 'This request was already decided.'}, status=400)
+        if add_member and req.requested_by:
+            req.consumer.members.add(req.requested_by)
+        req.status = status_value
+        req.decided_by = request.user
+        req.decided_at = timezone.now()
+        req.save(update_fields=['status', 'decided_by', 'decided_at'])
+        if req.requested_by:
+            notify([req.requested_by], request.user, Notification.Kind.REQUEST,
+                   f'Project access {status_value}: {req.consumer.name}', '', '/dev/projects')
+        return Response(ProjectAccessRequestSerializer(req).data)
 
     @extend_schema(responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=['post'], permission_classes=[IsAdminRole])
     def approve(self, request, pk=None):
-        gr = self.get_object()
-        if gr.status != GrantRequest.Status.PENDING:
-            return Response({'detail': 'This request was already decided.'}, status=400)
-        Grant.objects.update_or_create(
-            consumer=gr.consumer, client_org=gr.client_org, provider=gr.provider,
-            defaults={'active': True, 'scopes': gr.scopes or [], 'granted_by': request.user},
-        )
-        gr.status = GrantRequest.Status.APPROVED
-        gr.decided_by = request.user
-        gr.decided_at = timezone.now()
-        gr.save(update_fields=['status', 'decided_by', 'decided_at'])
-        return Response(GrantRequestSerializer(gr).data)
+        return self._decide(request, pk, ProjectAccessRequest.Status.APPROVED, add_member=True)
 
     @extend_schema(responses=OpenApiTypes.OBJECT)
     @action(detail=True, methods=['post'], permission_classes=[IsAdminRole])
     def deny(self, request, pk=None):
-        gr = self.get_object()
-        if gr.status != GrantRequest.Status.PENDING:
-            return Response({'detail': 'This request was already decided.'}, status=400)
-        gr.status = GrantRequest.Status.DENIED
-        gr.decided_by = request.user
-        gr.decided_at = timezone.now()
-        gr.save(update_fields=['status', 'decided_by', 'decided_at'])
-        return Response(GrantRequestSerializer(gr).data)
+        return self._decide(request, pk, ProjectAccessRequest.Status.DENIED, add_member=False)
 
 
 class AuditLogListView(generics.ListAPIView):
@@ -257,10 +244,9 @@ class AccessDataView(_AccessBase):
 
     def get(self, request, org_id, provider_slug):
         org, provider = self.get_targets(org_id, provider_slug)
-        if not has_access(request, org, provider, scope='read'):
+        if not has_access(request, org, provider):
             write_audit(request, 'data', org, provider, status='denied')
-            return Response({'detail': 'No active grant (read) for this client/provider.'},
-                            status=403)
+            return Response({'detail': 'No project grants access to this client.'}, status=403)
 
         connection, err = self.resolve_connection(
             org, provider, request.query_params.get('account_id'))
@@ -288,10 +274,9 @@ class AccessTokenView(_AccessBase):
 
     def post(self, request, org_id, provider_slug):
         org, provider = self.get_targets(org_id, provider_slug)
-        if not has_access(request, org, provider, scope='token'):
+        if not has_access(request, org, provider):
             write_audit(request, 'token', org, provider, status='denied')
-            return Response({'detail': 'No active grant (token) for this client/provider.'},
-                            status=403)
+            return Response({'detail': 'No project grants access to this client.'}, status=403)
 
         connection, err = self.resolve_connection(
             org, provider, request.data.get('account_id'))

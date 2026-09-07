@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Button, Layout, Menu, Tag, Tooltip, Typography, theme } from 'antd'
+import { Button, Dropdown, Layout, Menu, Tag, Tooltip, Typography, theme } from 'antd'
 import {
   ApiOutlined,
   AppstoreOutlined,
@@ -12,8 +12,10 @@ import {
   KeyOutlined,
   LinkOutlined,
   LogoutOutlined,
+  MessageOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -21,6 +23,7 @@ import { useAppDispatch, useAppSelector } from '@/app/redux/hooks'
 import { logout } from '@/app/slices/authSlice'
 import { toggleTheme } from '@/app/slices/uiSlice'
 import { apiSlice } from '@/app/api/apiSlice'
+import NotificationsBell from '@/components/NotificationsBell'
 import type { Role } from '@/types'
 
 const { Header, Sider, Content } = Layout
@@ -36,6 +39,7 @@ const MENU: Record<Role, { key: string; label: string; icon: ReactNode }[]> = {
     { key: '/', label: 'Dashboard', icon: <DashboardOutlined /> },
     { key: '/dev/access', label: 'Client access', icon: <AppstoreOutlined /> },
     { key: '/dev/projects', label: 'My projects', icon: <KeyOutlined /> },
+    { key: '/staff/messages', label: 'Client messages', icon: <MessageOutlined /> },
     { key: '/dev/quickstart', label: 'Quickstart & API', icon: <ApiOutlined /> },
   ],
   admin: [
@@ -43,7 +47,7 @@ const MENU: Record<Role, { key: string; label: string; icon: ReactNode }[]> = {
     { key: '/admin/approvals', label: 'Approvals', icon: <CheckSquareOutlined /> },
     { key: '/admin/grants', label: 'Grants', icon: <SafetyCertificateOutlined /> },
     { key: '/admin/orgs', label: 'Clients & users', icon: <TeamOutlined /> },
-    { key: '/admin/announcements', label: 'Announcements', icon: <BellOutlined /> },
+    { key: '/staff/messages', label: 'Client messages', icon: <MessageOutlined /> },
     { key: '/admin/audit', label: 'Audit log', icon: <FileTextOutlined /> },
   ],
 }
@@ -98,7 +102,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </Tag>
           {user.client_org_name && <Text type="secondary">{user.client_org_name}</Text>}
           <div style={{ flex: 1 }} />
-          <Text strong>{user.username}</Text>
+          <NotificationsBell />
           <Tooltip title={dark ? 'Light mode' : 'Dark mode'}>
             <Button
               type="text"
@@ -107,7 +111,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               onClick={() => dispatch(toggleTheme())}
             />
           </Tooltip>
-          <Button icon={<LogoutOutlined />} onClick={onLogout}>Log out</Button>
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                { key: 'account', label: 'Account', icon: <UserOutlined /> },
+                { type: 'divider' },
+                { key: 'logout', label: 'Log out', icon: <LogoutOutlined />, danger: true },
+              ],
+              onClick: ({ key }) => (key === 'account' ? navigate('/account') : onLogout()),
+            }}
+          >
+            <Button type="text" icon={<UserOutlined />}>{user.username}</Button>
+          </Dropdown>
         </Header>
         <Content style={{ padding: '22px 20px 48px', maxWidth: 1200, width: '100%', margin: '0 auto' }}>
           {children}

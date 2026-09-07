@@ -171,6 +171,28 @@ export interface DashboardSummary {
   [key: string]: unknown
 }
 
+export interface Comment {
+  id: number
+  note: number
+  author: number | null
+  author_username?: string
+  author_role?: Role
+  body: string
+  created_at: string
+}
+
+export interface Notification {
+  id: number
+  actor: number | null
+  actor_username?: string
+  kind: string
+  title: string
+  body: string
+  url: string
+  read: boolean
+  created_at: string
+}
+
 export interface AuditLog {
   id: number
   actor_type: string

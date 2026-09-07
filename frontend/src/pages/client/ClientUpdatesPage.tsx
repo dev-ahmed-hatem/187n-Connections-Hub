@@ -1,13 +1,13 @@
-import { App, Alert, Button, Card, Empty, List, Space, Tag, Typography } from 'antd'
+import { Alert, App, Button, Card, Empty, List, Space, Typography } from 'antd'
 
 import {
   useAnnouncementsQuery,
   useNotesQuery,
   useRequestsQuery,
-  useUpdateNoteMutation,
   useUpdateRequestMutation,
 } from '@/app/api/endpoints/portal'
 import { useStartConnectionMutation } from '@/app/api/endpoints/connections'
+import NoteThread from '@/components/NoteThread'
 
 const { Title, Text } = Typography
 
@@ -21,13 +21,13 @@ export default function ClientUpdatesPage() {
   const { data: announcements } = useAnnouncementsQuery()
   const { data: notes } = useNotesQuery()
   const { data: requests } = useRequestsQuery()
-  const [resolveNote] = useUpdateNoteMutation()
   const [updateRequest] = useUpdateRequestMutation()
   const [startConnection] = useStartConnectionMutation()
   const { message } = App.useApp()
 
   const pendingRequests = (requests ?? []).filter((r) => r.status === 'pending')
   const openNotes = (notes ?? []).filter((n) => n.status === 'open')
+  const resolvedNotes = (notes ?? []).filter((n) => n.status !== 'open')
 
   const connect = async (provider: string) => {
     const res = await startConnection({ provider }).unwrap()
@@ -40,7 +40,7 @@ export default function ClientUpdatesPage() {
 
       <Card title="Announcements">
         {(announcements ?? []).length === 0 ? (
-          <Empty description="No announcements" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No announcements" />
         ) : (
           <Space direction="vertical" style={{ width: '100%' }}>
             {announcements?.map((a) => (
@@ -53,66 +53,44 @@ export default function ClientUpdatesPage() {
 
       <Card title="Connection requests from the team">
         {pendingRequests.length === 0 ? (
-          <Empty description="No pending requests" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No pending requests" />
         ) : (
           <List
             dataSource={pendingRequests}
             renderItem={(r) => (
-              <List.Item
-                actions={[
-                  <Button key="c" type="primary" onClick={() => connect(r.provider_slug)}>
-                    Connect
-                  </Button>,
-                  <Button
-                    key="d"
-                    onClick={async () => {
-                      await updateRequest({ id: r.id, status: 'declined' })
-                      message.info('Request declined.')
-                    }}
-                  >
-                    Decline
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={`Connect ${r.provider_name}`}
-                  description={r.message || 'A developer requested this connection.'}
-                />
+              <List.Item actions={[
+                <Button key="c" type="primary" onClick={() => connect(r.provider_slug)}>Connect</Button>,
+                <Button key="d" onClick={async () => {
+                  await updateRequest({ id: r.id, status: 'declined' })
+                  message.info('Request declined.')
+                }}>Decline</Button>,
+              ]}>
+                <List.Item.Meta title={`Connect ${r.provider_name}`}
+                  description={r.message || 'A developer requested this connection.'} />
               </List.Item>
             )}
           />
         )}
       </Card>
 
-      <Card title="Blockers &amp; notes">
+      <Card title="Open blockers & notes">
         {openNotes.length === 0 ? (
-          <Empty description="Nothing needs your attention" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing needs your attention" />
         ) : (
-          <List
-            dataSource={openNotes}
-            renderItem={(n) => (
-              <List.Item
-                actions={[
-                  <Button key="r" onClick={() => resolveNote({ id: n.id, status: 'resolved' })}>
-                    Mark resolved
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={
-                    <Space>
-                      <Tag color={n.type === 'blocker' ? 'red' : 'blue'}>{n.type}</Tag>
-                      {n.title}
-                    </Space>
-                  }
-                  description={n.body}
-                />
-              </List.Item>
-            )}
-          />
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {openNotes.map((n) => <NoteThread key={n.id} note={n} />)}
+          </Space>
         )}
       </Card>
-      <Text type="secondary">Resolved items and completed requests are hidden.</Text>
+
+      {resolvedNotes.length > 0 && (
+        <Card title="Resolved">
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {resolvedNotes.map((n) => <NoteThread key={n.id} note={n} />)}
+          </Space>
+        </Card>
+      )}
+      <Text type="secondary">Replies notify the team; resolving closes the thread.</Text>
     </Space>
   )
 }

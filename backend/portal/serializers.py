@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Announcement, ConnectionRequest, Note
+from .models import Announcement, Comment, ConnectionRequest, Note, Notification
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
@@ -25,6 +25,26 @@ class NoteSerializer(serializers.ModelSerializer):
             'title', 'body', 'status', 'created_by', 'created_at',
         ]
         read_only_fields = ['created_by', 'created_at']
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    author_username = serializers.CharField(source='author.username', read_only=True)
+    author_role = serializers.CharField(source='author.role', read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = ['id', 'note', 'author', 'author_username', 'author_role', 'body', 'created_at']
+        read_only_fields = ['author', 'created_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source='actor.username', read_only=True)
+
+    class Meta:
+        model = Notification
+        fields = ['id', 'actor', 'actor_username', 'kind', 'title', 'body',
+                  'url', 'read', 'created_at']
+        read_only_fields = fields
 
 
 class ConnectionRequestSerializer(serializers.ModelSerializer):

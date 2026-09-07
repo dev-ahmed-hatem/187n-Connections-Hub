@@ -27,3 +27,15 @@ class IsAdminOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         return u.is_admin_role
+
+
+class IsStaffOrReadOnly(permissions.BasePermission):
+    """Admins and developers may write; everyone authenticated may read."""
+
+    def has_permission(self, request, view):
+        u = request.user
+        if not (u and u.is_authenticated):
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return u.is_admin_role or u.is_developer_role

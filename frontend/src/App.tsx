@@ -3,7 +3,9 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from '@/app/routes/ProtectedRoute'
 import RequireRole from '@/app/routes/RequireRole'
 import LoginPage from '@/pages/auth/LoginPage'
+import AccountPage from '@/pages/account/AccountPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
+import ClientMessagesPage from '@/pages/staff/ClientMessagesPage'
 import ClientConnectionsPage from '@/pages/client/ClientConnectionsPage'
 import ClientUpdatesPage from '@/pages/client/ClientUpdatesPage'
 import DevAccessPage from '@/pages/developer/DevAccessPage'
@@ -21,6 +23,9 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedRoute />}>
         <Route index element={<DashboardPage />} />
+        <Route path="account" element={<AccountPage />} />
+        <Route path="staff/messages" element={
+          <RequireRole roles={['developer']}><ClientMessagesPage /></RequireRole>} />
 
         <Route path="client/connections" element={
           <RequireRole roles={['client']}><ClientConnectionsPage /></RequireRole>} />

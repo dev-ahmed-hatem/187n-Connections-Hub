@@ -1,6 +1,6 @@
 import { Component } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Result } from 'antd'
+import { Button, Result, Space } from 'antd'
 
 interface Props {
   children: ReactNode
@@ -29,9 +29,14 @@ export default class ErrorBoundary extends Component<Props, State> {
           title="Something went wrong"
           subTitle="An unexpected error occurred. Reloading usually fixes it."
           extra={
-            <Button type="primary" onClick={() => window.location.reload()}>
-              Reload
-            </Button>
+            <Space>
+              <Button type="primary" onClick={() => window.location.reload()}>
+                Reload
+              </Button>
+              <Button onClick={() => { window.location.href = '/' }}>
+                Back to dashboard
+              </Button>
+            </Space>
           }
         />
       )

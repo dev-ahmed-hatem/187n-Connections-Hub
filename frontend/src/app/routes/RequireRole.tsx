@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 
 import { useAppSelector } from '@/app/redux/hooks'
+import ForbiddenPage from '@/pages/misc/ForbiddenPage'
 import type { Role } from '@/types'
 
 export default function RequireRole({
@@ -15,7 +16,7 @@ export default function RequireRole({
   if (!user) return <Navigate to="/login" replace />
   // Admins can view everything.
   if (user.role !== 'admin' && !roles.includes(user.role)) {
-    return <Navigate to="/" replace />
+    return <ForbiddenPage />
   }
   return <>{children}</>
 }

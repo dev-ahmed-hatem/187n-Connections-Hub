@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 
 import ProtectedRoute from '@/app/routes/ProtectedRoute'
 import RequireRole from '@/app/routes/RequireRole'
@@ -13,8 +13,8 @@ import QuickstartPage from '@/pages/developer/QuickstartPage'
 import AdminApprovalsPage from '@/pages/admin/AdminApprovalsPage'
 import AdminProjectsPage from '@/pages/admin/AdminProjectsPage'
 import AdminOrgsPage from '@/pages/admin/AdminOrgsPage'
-import AdminAnnouncementsPage from '@/pages/admin/AdminAnnouncementsPage'
 import AdminAuditPage from '@/pages/admin/AdminAuditPage'
+import NotFoundPage from '@/pages/misc/NotFoundPage'
 
 export default function App() {
   return (
@@ -42,12 +42,12 @@ export default function App() {
           <RequireRole roles={['admin']}><AdminProjectsPage /></RequireRole>} />
         <Route path="admin/orgs" element={
           <RequireRole roles={['admin']}><AdminOrgsPage /></RequireRole>} />
-        <Route path="admin/announcements" element={
-          <RequireRole roles={['admin']}><AdminAnnouncementsPage /></RequireRole>} />
         <Route path="admin/audit" element={
           <RequireRole roles={['admin']}><AdminAuditPage /></RequireRole>} />
+
+        {/* Authenticated catch-all: 404 inside the app shell (keeps the nav). */}
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

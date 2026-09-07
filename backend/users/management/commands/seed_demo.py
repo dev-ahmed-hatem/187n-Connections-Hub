@@ -1,16 +1,13 @@
-"""Seed the hub with demo data so the whole flow is walkable immediately.
+"""Seed the hub with demo users, clients, providers, a project and portal content.
 
-Idempotent: safe to run repeatedly. Prints a fresh demo API key each run.
+Idempotent. Does NOT create any platform connections — those come from real OAuth.
 """
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
 from access.models import Consumer
-from connections.models import Connection, ProviderCredential
 from portal.models import Announcement, ConnectionRequest, Note
-from providers.adapters import get_adapter
 from providers.models import Provider
 from users.models import ClientOrg
 
@@ -28,16 +25,9 @@ ORGS = [
     {'slug': 'volt-fitness', 'name': 'Volt Fitness'},
 ]
 
-# org slug -> {provider slug: status}
-CONNECTIONS = {
-    'northwind-coffee': {'google-ads': 'connected', 'shopify': 'connected'},
-    'lumen-skincare': {'google-ads': 'connected', 'meta-ads': 'needs_reconnect'},
-    'volt-fitness': {'google-ads': 'connected', 'meta-ads': 'connected', 'shopify': 'connected'},
-}
-
 
 class Command(BaseCommand):
-    help = 'Seed demo users, providers, client orgs, connections, grants and portal content.'
+    help = 'Seed demo users, providers, client orgs, a project and portal content (no connections).'
 
     def handle(self, *args, **options):
         providers = {}
@@ -45,7 +35,7 @@ class Command(BaseCommand):
             obj, _ = Provider.objects.update_or_create(
                 slug=p['slug'],
                 defaults={'name': p['name'], 'short_code': p['short_code'],
-                          'color': p['color'], 'is_mock': True, 'is_active': True},
+                          'color': p['color'], 'is_mock': False, 'is_active': True},
             )
             providers[p['slug']] = obj
 
@@ -61,13 +51,7 @@ class Command(BaseCommand):
         self._user('lumen', 'client123', role=User.Role.CLIENT, client_org=orgs['lumen-skincare'])
         self._user('volt', 'client123', role=User.Role.CLIENT, client_org=orgs['volt-fitness'])
 
-        # Pre-seed connections
-        for org_slug, provider_map in CONNECTIONS.items():
-            for provider_slug, status in provider_map.items():
-                self._seed_connection(orgs[org_slug], providers[provider_slug], status)
-
-        # A demo project bound to a client, with the developer as a member
-        # (so the API-key + member paths work out of the box).
+        # A demo project bound to a client, with the developer as a member.
         consumer = Consumer.objects.filter(name='Demo Operator').first()
         raw_key = None
         if consumer is None:
@@ -85,26 +69,22 @@ class Command(BaseCommand):
                       'body': 'Connect your accounts once and we handle the rest.',
                       'severity': Announcement.Severity.INFO, 'active': True, 'created_by': admin},
         )
-        Announcement.objects.update_or_create(
-            title='Scheduled maintenance Sunday 02:00 UTC',
-            defaults={'audience': Announcement.Audience.CLIENTS,
-                      'body': 'Brief downtime expected while we upgrade the vault.',
-                      'severity': Announcement.Severity.WARNING, 'active': True, 'created_by': admin},
-        )
         Note.objects.update_or_create(
-            client_org=orgs['lumen-skincare'], title='Reconnect Meta Ads',
-            defaults={'type': Note.Type.BLOCKER,
-                      'body': 'Your Meta Ads connection expired — please reconnect.',
+            client_org=orgs['northwind-coffee'], title='Connect your platforms',
+            defaults={'type': Note.Type.NOTE,
+                      'body': 'Please connect the accounts your operator needs.',
                       'status': Note.Status.OPEN, 'created_by': admin},
         )
-        ConnectionRequest.objects.update_or_create(
-            client_org=orgs['northwind-coffee'], provider=providers['meta-ads'],
+        ConnectionRequest.objects.filter(
+            client_org=orgs['northwind-coffee'], provider=providers['google-ads'],
+            requested_by=developer).delete()
+        ConnectionRequest.objects.create(
+            client_org=orgs['northwind-coffee'], provider=providers['google-ads'],
             requested_by=developer,
-            defaults={'message': 'We need Meta Ads to launch the new operator.',
-                      'status': ConnectionRequest.Status.PENDING},
-        )
+            message='We need Google connected to launch the operator.',
+            status=ConnectionRequest.Status.PENDING)
 
-        self.stdout.write(self.style.SUCCESS('Demo data seeded.'))
+        self.stdout.write(self.style.SUCCESS('Demo data seeded (no connections — connect via OAuth).'))
         self.stdout.write('Logins (username / password):')
         self.stdout.write('  admin / admin123        (admin)')
         self.stdout.write('  dev / dev12345          (developer)')
@@ -114,8 +94,7 @@ class Command(BaseCommand):
         if raw_key:
             self.stdout.write(self.style.WARNING(f'Demo Operator API key (shown once): {raw_key}'))
         else:
-            self.stdout.write('Demo Operator consumer already existed (API key not reshown). '
-                              'Delete it in admin to regenerate.')
+            self.stdout.write('Demo Operator project already existed (API key not reshown).')
 
     def _user(self, username, password, role, client_org=None, superuser=False):
         user, created = User.objects.get_or_create(username=username, defaults={
@@ -131,27 +110,3 @@ class Command(BaseCommand):
             user.is_superuser = superuser
             user.save()
         return user
-
-    def _seed_connection(self, org, provider, status):
-        # Mirror the real connect flow: one grant may expose several accounts.
-        adapter = get_adapter(provider)
-        state = f'seed-{org.slug}-{provider.slug}'
-        result = adapter.exchange_code(adapter.make_code(state), state)
-        expires_at = timezone.now() + timezone.timedelta(seconds=result['expires_in'])
-        enum_meta = {**result['meta'], 'external_account_id': result.get('external_account_id', '')}
-        accounts = adapter.list_accounts(result['access_token'], enum_meta)
-        credential = ProviderCredential.objects.create(
-            client_org=org, provider=provider,
-            enc_refresh_token=result['refresh_token'],
-            enc_access_token=result['access_token'],
-            access_expires_at=expires_at,
-        )
-        for acct in accounts:
-            Connection.objects.update_or_create(
-                client_org=org, provider=provider,
-                external_account_id=acct['external_account_id'],
-                defaults={'credential': credential,
-                          'display_name': acct.get('display_name') or provider.name,
-                          'status': status, 'meta': acct.get('meta', {}),
-                          'last_checked': timezone.now()},
-            )

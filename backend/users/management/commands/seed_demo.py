@@ -64,7 +64,7 @@ class Command(BaseCommand):
 
         # Portal content
         Announcement.objects.update_or_create(
-            title='Welcome to the Connections Hub',
+            title='Welcome to the 187n Connections Hub',
             defaults={'audience': Announcement.Audience.ALL,
                       'body': 'Connect your accounts once and we handle the rest.',
                       'severity': Announcement.Severity.INFO, 'active': True, 'created_by': admin},

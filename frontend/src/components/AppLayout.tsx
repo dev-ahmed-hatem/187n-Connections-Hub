@@ -81,7 +81,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <span className="hub-brand-tile">
             <img src="/brand-mark.svg" alt="" />
           </span>
-          <span className="hub-brand-name">Connections Hub</span>
+          <span className="hub-brand-name">
+            <span className="hub-brand-title">187n</span>
+            <span className="hub-brand-sub">Connections Hub</span>
+          </span>
         </div>
         <Menu
           mode="inline"

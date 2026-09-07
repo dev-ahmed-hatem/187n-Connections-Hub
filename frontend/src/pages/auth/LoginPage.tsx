@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
 import { Alert, Button, Card, Form, Input, Typography } from 'antd'
+import { LockOutlined, UserOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 
 import { useLoginMutation } from '@/app/api/endpoints/auth'
 import { useAppDispatch, useAppSelector } from '@/app/redux/hooks'
 import { setCredentials } from '@/app/slices/authSlice'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 export default function LoginPage() {
   const [login, { isLoading, error }] = useLoginMutation()
@@ -29,33 +30,62 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center',
-      padding: 16,
-      background: 'radial-gradient(1100px 460px at 50% -10%, var(--accent-soft), transparent), var(--bg-soft)' }}>
-      <Card style={{ width: 380 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <span className="hub-brand-tile"><img src="/brand-mark.svg" alt="" /></span>
-          <Title level={3} style={{ margin: 0 }}>Connections Hub</Title>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 16,
+        background:
+          'radial-gradient(900px 380px at 12% -12%, var(--accent-soft), transparent 60%),' +
+          'radial-gradient(720px 340px at 100% 112%, var(--accent-soft), transparent 62%),' +
+          'var(--bg-soft)',
+      }}
+    >
+      <Card
+        style={{ width: 408, boxShadow: 'var(--shadow-card)' }}
+        styles={{ body: { padding: 30 } }}
+      >
+        {/* Brand header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginBottom: 22 }}>
+          <span className="hub-brand-tile" style={{ width: 44, height: 44, borderRadius: 13 }}>
+            <img src="/brand-mark.svg" alt="" style={{ width: 28, height: 28 }} />
+          </span>
+          <div style={{ lineHeight: 1.2 }}>
+            <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>
+              <span style={{ color: 'var(--accent)' }}>187n</span> Connections Hub
+            </div>
+            <Text type="secondary" style={{ fontSize: 12.5 }}>
+              Connect once. Operate anywhere.
+            </Text>
+          </div>
         </div>
-        <Text type="secondary">Sign in to continue</Text>
-        <Form layout="vertical" onFinish={onFinish} style={{ marginTop: 20 }}>
+
+        <Form layout="vertical" size="large" onFinish={onFinish} requiredMark={false}>
           <Form.Item name="username" label="Username" rules={[{ required: true }]}>
-            <Input autoFocus placeholder="e.g. admin, dev, northwind" />
+            <Input autoFocus prefix={<UserOutlined />} placeholder="e.g. admin, dev, northwind" />
           </Form.Item>
-          <Form.Item name="password" label="Password" rules={[{ required: true }]}>
-            <Input.Password placeholder="••••••••" />
+          <Form.Item name="password" label="Password" rules={[{ required: true }]}
+            style={{ marginBottom: 12 }}>
+            <Input.Password prefix={<LockOutlined />} placeholder="••••••••" />
           </Form.Item>
           {error != null && (
-            <Alert type="error" showIcon style={{ marginBottom: 12 }}
+            <Alert type="error" showIcon style={{ marginBottom: 14 }}
               message="Invalid username or password." />
           )}
           <Button type="primary" htmlType="submit" block loading={isLoading}>
             Sign in
           </Button>
         </Form>
-        <Text type="secondary" style={{ display: 'block', marginTop: 16, fontSize: 12 }}>
-          Demo: admin/admin123 · dev/dev12345 · northwind/client123
-        </Text>
+
+        <div style={{
+          marginTop: 20, padding: '10px 12px', borderRadius: 10,
+          background: 'var(--bg-soft)', border: '1px solid var(--line)',
+        }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            <b>Demo logins</b> — admin/admin123 · dev/dev12345 · northwind/client123
+          </Text>
+        </div>
       </Card>
     </div>
   )

@@ -1,5 +1,5 @@
 """
-Django settings for the Connections Hub project.
+Django settings for the 187n Connections Hub project.
 """
 
 from datetime import timedelta
@@ -156,7 +156,7 @@ REST_FRAMEWORK = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Connections Hub API',
+    'TITLE': '187n Connections Hub API',
     'DESCRIPTION': 'Connect client accounts once; granted projects fetch data or '
                    'short-lived tokens. Machine access uses an API key: '
                    '`Authorization: ApiKey hub_xxx`.',

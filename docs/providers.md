@@ -1,5 +1,9 @@
 # Going live with real providers
 
+> Detailed per-provider setup (APIs to enable + exact scope names) lives in
+> [`docs/setup/`](setup/README.md): [Google](setup/google.md) · [Meta](setup/meta.md) ·
+> [Shopify](setup/shopify.md). This page is the quick reference.
+
 The hub ships with a `MockAdapter` so everything works locally without credentials.
 To connect **real** accounts, create the provider's OAuth app, put its credentials in
 `backend/.env`, then flip the provider live:

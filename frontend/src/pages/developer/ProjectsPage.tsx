@@ -14,7 +14,7 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { KeyOutlined, ReloadOutlined, SafetyOutlined } from '@ant-design/icons'
+import { CopyOutlined, KeyOutlined, ReloadOutlined, SafetyOutlined } from '@ant-design/icons'
 
 import {
   useConsumersQuery,
@@ -191,12 +191,22 @@ function ProjectPanel({ project }: { project: Consumer }) {
             <Text type="secondary">Not connected</Text>
           ) : (
             <Space direction="vertical" style={{ width: '100%' }} size={8}>
-              {g.accounts.map((a) => (
+              {g.accounts.map((a) => {
+                const name = a.display_name?.trim()
+                return (
                 <div key={a.connection_id} style={{ display: 'flex', alignItems: 'center', gap: 8,
                   justifyContent: 'space-between' }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{a.external_account_id}</div>
-                    <Tag color={STATUS_COLOR[a.status] ?? 'default'}>{a.status.replace('_', ' ')}</Tag>
+                    <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap' }}>{name || a.external_account_id}</div>
+                    {name && (
+                      <div style={{ fontSize: 12, color: 'var(--muted)', wordBreak: 'break-all' }}>
+                        {a.external_account_id}
+                      </div>
+                    )}
+                    <Tag color={STATUS_COLOR[a.status] ?? 'default'} style={{ marginTop: 4 }}>
+                      {a.status.replace('_', ' ')}
+                    </Tag>
                   </div>
                   {a.status === 'connected' && (
                     <Space size={4}>
@@ -209,13 +219,26 @@ function ProjectPanel({ project }: { project: Consumer }) {
                     </Space>
                   )}
                 </div>
-              ))}
+                )
+              })}
             </Space>
           )}
         </Card>
       ))}
 
       <Modal title={result?.title} open={!!result} onCancel={() => setResult(null)} footer={null}>
+        {(() => {
+          const token = (result?.body as { access_token?: string } | undefined)?.access_token
+          return token ? (
+            <Button icon={<CopyOutlined />} style={{ marginBottom: 8 }}
+              onClick={async () => {
+                await navigator.clipboard.writeText(token)
+                message.success('Token copied to clipboard.')
+              }}>
+              Copy token
+            </Button>
+          ) : null
+        })()}
         <pre style={{ background: 'rgba(128,128,128,0.12)', padding: 12, borderRadius: 8,
           overflow: 'auto' }}>{JSON.stringify(result?.body, null, 2)}</pre>
       </Modal>

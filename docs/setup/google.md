@@ -51,6 +51,26 @@ API below (exact names as they appear in the Library):
 - **Authorized redirect URIs**: `http://localhost:8000/api/connections/callback`
 - Create → copy **Client ID** and **Client secret**.
 
+## Do we need a Manager account (MCC)?
+
+**For Google Ads: yes.** Every Google Ads API call needs a **developer token**, and Google only
+issues developer tokens to a **Manager (MCC) account** — you can't get one from a regular Google
+Ads account. So:
+
+- **No MCC → no developer token → no Google Ads API.** OAuth still connects the client's Google
+  account, and **Analytics / Search Console / Merchant / Sheets / Drive still work without an
+  MCC** — only Ads is blocked.
+- An MCC here is just **the thing that owns your developer token**. The hub uses the **standard
+  OAuth** model: the client grants access and you call *their* account with **your** developer
+  token — their account does **not** need to be linked under your MCC. (Linking clients under an
+  MCC is a separate, optional model the hub doesn't require.)
+
+**Recommendation: create one.** It's free, takes minutes, needs no ad spend, doesn't affect
+clients, and it's the only path to Ads API access. Test-account access is instant; **Basic
+access** (real client data) is a short application (~1–2 days). Skip it only if the hub won't
+handle Google Ads at all — then remove `https://www.googleapis.com/auth/adwords` from
+`GOOGLE_SCOPES` and leave the developer token blank.
+
 ## Part D — Google Ads only: developer token + Manager account
 
 Needed **only** for the `adwords` scope / Ads data (not for Analytics/Search Console/etc.):

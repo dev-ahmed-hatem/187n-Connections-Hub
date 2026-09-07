@@ -6,10 +6,16 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from authentication.permissions import IsStaffOrReadOnly
+from access.models import Consumer
+from authentication.permissions import IsAdminOrReadOnly, IsStaffOrReadOnly
 
 from . import notifications as notify_svc
 from .models import Announcement, Comment, ConnectionRequest, Note, Notification
+
+
+def dev_client_ids(user):
+    """Client-org ids a developer is assigned to (via project membership)."""
+    return set(Consumer.objects.filter(members=user).values_list('client_org_id', flat=True))
 from .serializers import (
     AnnouncementSerializer,
     CommentSerializer,
@@ -23,10 +29,10 @@ STAFF_MESSAGES_URL = '/staff/messages'
 
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
-    """Admins/developers post announcements; everyone reads the ones aimed at them."""
+    """Only admins post announcements; everyone reads the ones aimed at them."""
 
     serializer_class = AnnouncementSerializer
-    permission_classes = [IsStaffOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
 
     def get_queryset(self):
         user = self.request.user
@@ -63,14 +69,20 @@ class NoteViewSet(viewsets.ModelViewSet):
         qs = Note.objects.select_related('client_org')
         if user.is_client_role:
             return qs.filter(client_org_id=user.client_org_id)
+        if user.is_developer_role:
+            qs = qs.filter(client_org_id__in=dev_client_ids(user))
         org_id = self.request.query_params.get('client_org')
         return qs.filter(client_org_id=org_id) if org_id else qs
 
     def perform_create(self, serializer):
-        note = serializer.save(created_by=self.request.user)
+        user = self.request.user
+        org = serializer.validated_data['client_org']
+        if user.is_developer_role and org.id not in dev_client_ids(user):
+            raise PermissionDenied('You can only message clients assigned to your projects.')
+        note = serializer.save(created_by=user)
         kind = (Notification.Kind.BLOCKER if note.type == Note.Type.BLOCKER
                 else Notification.Kind.NOTE)
-        notify_svc.notify(notify_svc.client_users(note.client_org), self.request.user,
+        notify_svc.notify(notify_svc.client_users(note.client_org), user,
                           kind, f'New {note.type}: {note.title}', note.body, CLIENT_UPDATES_URL)
 
     def _set_status(self, request, pk, status_value):
@@ -109,6 +121,8 @@ class CommentViewSet(viewsets.ModelViewSet):
         note = get_object_or_404(Note.objects.select_related('client_org'), id=note_id)
         user = self.request.user
         if user.is_client_role and note.client_org_id != user.client_org_id:
+            raise PermissionDenied('Not allowed.')
+        if user.is_developer_role and note.client_org_id not in dev_client_ids(user):
             raise PermissionDenied('Not allowed.')
         return note
 

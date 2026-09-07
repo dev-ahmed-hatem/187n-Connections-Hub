@@ -20,7 +20,11 @@ export const adminApi = apiSlice.injectEndpoints({
       query: (body) => ({ url: '/users/accounts/', method: 'post', data: body }),
       invalidatesTags: ['Users'],
     }),
+    deleteUser: build.mutation<void, number>({
+      query: (id) => ({ url: `/users/accounts/${id}/`, method: 'delete' }),
+      invalidatesTags: ['Users'],
+    }),
   }),
 })
 
-export const { useUsersQuery, useCreateUserMutation } = adminApi
+export const { useUsersQuery, useCreateUserMutation, useDeleteUserMutation } = adminApi

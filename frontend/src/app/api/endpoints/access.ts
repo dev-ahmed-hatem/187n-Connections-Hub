@@ -42,6 +42,10 @@ export const accessApi = apiSlice.injectEndpoints({
       query: (id) => ({ url: `/access/consumers/${id}/rotate-key/`, method: 'post' }),
       invalidatesTags: ['Consumers'],
     }),
+    deleteProject: build.mutation<void, number>({
+      query: (id) => ({ url: `/access/consumers/${id}/`, method: 'delete' }),
+      invalidatesTags: ['Consumers'],
+    }),
     projectAccess: build.query<ProjectAccess, number>({
       query: (id) => ({ url: `/access/consumers/${id}/access/`, method: 'get' }),
       providesTags: ['Connections'],
@@ -123,6 +127,7 @@ export const {
   useCreateProjectMutation,
   useUpdateProjectMutation,
   useRotateKeyMutation,
+  useDeleteProjectMutation,
   useProjectAccessQuery,
   useRequestableProjectsQuery,
   useProjectRequestsQuery,

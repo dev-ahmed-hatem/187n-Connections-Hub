@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
+from access.models import Consumer
 from users.models import ClientOrg
 
 from .models import Note, Notification
@@ -15,6 +16,22 @@ class CommsTests(APITestCase):
         self.dev = User.objects.create_user('dev', password='x', role=User.Role.DEVELOPER)
         self.client_user = User.objects.create_user(
             'c', password='x', role=User.Role.CLIENT, client_org=self.org)
+        # dev is assigned to this client via a project
+        self.project, _ = Consumer.create_with_key('p', client_org=self.org, owner=self.admin)
+        self.project.members.add(self.dev)
+
+    def test_developer_cannot_create_announcement(self):
+        self.client.force_authenticate(self.dev)
+        res = self.client.post('/api/portal/announcements/',
+                               {'title': 'Hi', 'audience': 'all'}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    def test_developer_cannot_message_unassigned_client(self):
+        other = ClientOrg.objects.create(name='Other', slug='other')
+        self.client.force_authenticate(self.dev)
+        res = self.client.post('/api/portal/notes/',
+                               {'client_org': other.id, 'type': 'note', 'title': 'X'}, format='json')
+        self.assertEqual(res.status_code, 403)
 
     def test_staff_blocker_notifies_client(self):
         self.client.force_authenticate(self.dev)

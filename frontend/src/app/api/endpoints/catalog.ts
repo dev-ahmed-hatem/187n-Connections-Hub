@@ -15,7 +15,16 @@ export const catalogApi = apiSlice.injectEndpoints({
       query: (body) => ({ url: '/users/orgs/', method: 'post', data: body }),
       invalidatesTags: ['Orgs'],
     }),
+    deleteOrg: build.mutation<void, number>({
+      query: (id) => ({ url: `/users/orgs/${id}/`, method: 'delete' }),
+      invalidatesTags: ['Orgs', 'Consumers', 'Connections'],
+    }),
   }),
 })
 
-export const { useProvidersQuery, useOrgsQuery, useCreateOrgMutation } = catalogApi
+export const {
+  useProvidersQuery,
+  useOrgsQuery,
+  useCreateOrgMutation,
+  useDeleteOrgMutation,
+} = catalogApi

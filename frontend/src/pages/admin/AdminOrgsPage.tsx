@@ -11,8 +11,19 @@ import {
   Typography,
 } from 'antd'
 
-import { useCreateOrgMutation, useOrgsQuery } from '@/app/api/endpoints/catalog'
-import { useCreateUserMutation, useUsersQuery } from '@/app/api/endpoints/admin'
+import { DeleteOutlined } from '@ant-design/icons'
+
+import {
+  useCreateOrgMutation,
+  useDeleteOrgMutation,
+  useOrgsQuery,
+} from '@/app/api/endpoints/catalog'
+import {
+  useCreateUserMutation,
+  useDeleteUserMutation,
+  useUsersQuery,
+} from '@/app/api/endpoints/admin'
+import { useAppSelector } from '@/app/redux/hooks'
 import type { ClientOrg, User } from '@/types'
 
 const { Title, Text } = Typography
@@ -26,7 +37,10 @@ export default function AdminOrgsPage() {
   const { data: users } = useUsersQuery()
   const [createOrg, { isLoading: creatingOrg }] = useCreateOrgMutation()
   const [createUser, { isLoading: creatingUser }] = useCreateUserMutation()
-  const { message } = App.useApp()
+  const [deleteOrg] = useDeleteOrgMutation()
+  const [deleteUser] = useDeleteUserMutation()
+  const me = useAppSelector((s) => s.auth.user)
+  const { message, modal } = App.useApp()
   const [orgForm] = Form.useForm()
   const [userForm] = Form.useForm()
 
@@ -55,10 +69,23 @@ export default function AdminOrgsPage() {
     }
   }
 
+  const confirmDelete = (title: string, content: string, onOk: () => void) =>
+    modal.confirm({ title, content, okButtonProps: { danger: true }, onOk })
+
   const orgColumns = [
     { title: 'Client', dataIndex: 'name', key: 'name' },
     { title: 'Slug', dataIndex: 'slug', key: 'slug',
       render: (s: string) => <Text code>{s}</Text> },
+    {
+      title: '', key: 'actions',
+      render: (_: unknown, o: ClientOrg) => (
+        <Button size="small" danger icon={<DeleteOutlined />} onClick={() =>
+          confirmDelete(`Delete client "${o.name}"?`,
+            'This removes its users, connections and projects too.',
+            async () => { await deleteOrg(o.id).unwrap(); message.success('Client deleted.') })
+        } />
+      ),
+    },
   ]
   const userColumns = [
     { title: 'Username', dataIndex: 'username', key: 'username' },
@@ -67,6 +94,16 @@ export default function AdminOrgsPage() {
       render: (_: unknown, u: User) => <Tag>{u.role}</Tag>,
     },
     { title: 'Client', dataIndex: 'client_org_name', key: 'client' },
+    {
+      title: '', key: 'actions',
+      render: (_: unknown, u: User) => (
+        <Button size="small" danger icon={<DeleteOutlined />} disabled={u.id === me?.id}
+          onClick={() =>
+            confirmDelete(`Delete user "${u.username}"?`, 'This cannot be undone.',
+              async () => { await deleteUser(u.id).unwrap(); message.success('User deleted.') })
+          } />
+      ),
+    },
   ]
 
   return (

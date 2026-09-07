@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied
 
 from authentication.permissions import IsAdminOrReadOnly, IsAdminRole
 
@@ -34,3 +35,8 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return UserCreateSerializer
         return UserSerializer
+
+    def perform_destroy(self, instance):
+        if instance.id == self.request.user.id:
+            raise PermissionDenied('You cannot delete your own account.')
+        instance.delete()

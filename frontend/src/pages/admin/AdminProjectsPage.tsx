@@ -12,11 +12,12 @@ import {
   Tag,
   Typography,
 } from 'antd'
-import { PlusOutlined, ReloadOutlined, TeamOutlined } from '@ant-design/icons'
+import { DeleteOutlined, PlusOutlined, ReloadOutlined, TeamOutlined } from '@ant-design/icons'
 
 import {
   useConsumersQuery,
   useCreateProjectMutation,
+  useDeleteProjectMutation,
   useRotateKeyMutation,
   useUpdateProjectMutation,
 } from '@/app/api/endpoints/access'
@@ -33,6 +34,7 @@ export default function AdminProjectsPage() {
   const [createProject, { isLoading: creating }] = useCreateProjectMutation()
   const [updateProject] = useUpdateProjectMutation()
   const [rotateKey] = useRotateKeyMutation()
+  const [deleteProject] = useDeleteProjectMutation()
   const { message, modal } = App.useApp()
   const [createForm] = Form.useForm()
   const [membersForm] = Form.useForm()
@@ -90,6 +92,14 @@ export default function AdminProjectsPage() {
         <Space>
           <Button size="small" icon={<TeamOutlined />} onClick={() => openEdit(p)}>Members</Button>
           <Button size="small" icon={<ReloadOutlined />} onClick={() => onRotate(p)}>Rotate key</Button>
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={() =>
+            modal.confirm({
+              title: `Delete project "${p.name}"?`,
+              content: 'Its API key stops working immediately.',
+              okButtonProps: { danger: true },
+              onOk: async () => { await deleteProject(p.id).unwrap(); message.success('Project deleted.') },
+            })
+          } />
         </Space>
       ),
     },

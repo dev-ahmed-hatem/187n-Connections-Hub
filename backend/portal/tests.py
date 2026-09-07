@@ -62,6 +62,15 @@ class CommsTests(APITestCase):
         self.assertTrue(Notification.objects.filter(
             recipient=self.dev, kind='resolved').exists())
 
+    def test_cannot_reply_on_resolved_note(self):
+        note = Note.objects.create(client_org=self.org, type=Note.Type.BLOCKER,
+                                   title='X', created_by=self.dev,
+                                   status=Note.Status.RESOLVED)
+        self.client.force_authenticate(self.client_user)
+        res = self.client.post('/api/portal/comments/',
+                               {'note': note.id, 'body': 'late reply'}, format='json')
+        self.assertEqual(res.status_code, 403)
+
     def test_client_cannot_create_announcement(self):
         self.client.force_authenticate(self.client_user)
         res = self.client.post('/api/portal/announcements/',

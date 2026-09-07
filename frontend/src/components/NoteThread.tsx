@@ -60,11 +60,17 @@ export default function NoteThread({ note }: { note: Note }) {
         ))}
       </Space>
 
-      <Space.Compact style={{ width: '100%', marginTop: 8 }}>
-        <Input value={text} onChange={(e) => setText(e.target.value)} onPressEnter={send}
-          placeholder="Write a reply…" />
-        <Button type="primary" loading={sending} onClick={send}>Reply</Button>
-      </Space.Compact>
+      {open ? (
+        <Space.Compact style={{ width: '100%', marginTop: 8 }}>
+          <Input value={text} onChange={(e) => setText(e.target.value)} onPressEnter={send}
+            placeholder="Write a reply…" />
+          <Button type="primary" loading={sending} onClick={send}>Reply</Button>
+        </Space.Compact>
+      ) : (
+        <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
+          This thread is resolved. Reopen it to reply.
+        </Text>
+      )}
     </Card>
   )
 }

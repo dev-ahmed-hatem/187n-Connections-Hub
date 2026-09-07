@@ -135,6 +135,8 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         note = self._note_or_403(serializer.validated_data['note'].id)
+        if note.status == Note.Status.RESOLVED:
+            raise PermissionDenied('This thread is resolved. Reopen it to reply.')
         comment = serializer.save(author=self.request.user)
         user = self.request.user
         if user.is_client_role:

@@ -1,42 +1,51 @@
 # Shopify — OAuth app setup
 
-Shopify **requires an HTTPS redirect**, so local testing needs a tunnel (ngrok / cloudflared).
-The callback is **HMAC-verified** with your API secret — forged callbacks are rejected
-(`?error=verification_failed`).
+Shopify OAuth is **per-shop** (you authorize one store at a time; the shop domain *is* the
+account id). The offline access token **does not expire**. The callback is **HMAC-verified**
+with your API secret — forged callbacks are rejected (`?error=verification_failed`).
 
-Redirect URI used by the hub (register the tunnel form of it):
+Shopify requires an **HTTPS** redirect:
 ```
-<https-base>/api/connections/callback
-# local example: https://<your-tunnel>.trycloudflare.com/api/connections/callback
+<BACKEND_BASE_URL>/api/connections/callback
+# deployed example: https://hub187.pythonanywhere.com/api/connections/callback
 ```
+> **No tunnel needed if your backend is already HTTPS** (e.g. a PythonAnywhere / hosted
+> deployment). A tunnel (ngrok / cloudflared) is only required when testing against a **local
+> http** backend — see Part A. Ensure `BACKEND_BASE_URL` includes the `https://` scheme.
 
 ---
 
-## Part A — Tunnel (local testing)
+## Part A — Tunnel (ONLY for a local http backend)
 
+Skip this entirely if your backend is deployed over HTTPS. For local dev:
 ```bash
 cloudflared tunnel --url http://localhost:8000       # or: ngrok http 8000
 ```
-Set in `backend/.env` (so authorize + callback URLs use HTTPS):
-```
-BACKEND_BASE_URL=https://<your-tunnel>
-```
+Then set `BACKEND_BASE_URL=https://<your-tunnel>` in `backend/.env`.
 
-## Part B — Create the app
+## Part B — Partner account + development store
 
-Shopify **Partners** account → **Apps → Create app** (custom or public).
-- **App URL**: `<https-base>/`
-- **Allowed redirection URL(s)**: `<https-base>/api/connections/callback`
-- Copy the **API key** and **API secret key** (Client credentials).
+1. Sign up free at **partners.shopify.com** (no store required).
+2. **Stores → Add store → Create development store** (e.g. `northwind-coffee.myshopify.com`).
+   Optionally preload sample products/orders. This is what you connect/test against.
 
-## Part C — Development store
+## Part C — Create the app + release the config
 
-Partners → **Stores → Add store → Development store** — this is what you'll connect/test against.
+1. **Apps → Create app → Create app manually** → name it.
+2. **Configuration** tab:
+   - **App URL**: your frontend URL (e.g. `https://187n-hub.vercel.app`).
+   - **Allowed redirection URL(s)**: your full callback URL from the top of this page.
+   - **Admin API access scopes**: the same scope list you put in `SHOPIFY_SCOPES` (Part D).
+     Modern Shopify apps are **config-driven** — scopes requested at OAuth time must be declared
+     here or they won't be granted.
+   - **Save**, then **Release** a new **version**. Configuration changes (App URL, redirect,
+     scopes) only take effect once released.
+3. **API credentials / Client credentials** → copy **Client ID** (API key) and **Client secret**.
 
 ## Part D — Scopes
 
-The hub requests these exact Shopify access scopes (default; override with `SHOPIFY_SCOPES`).
-Configure the **same** set on the app's API access:
+The hub's broad default (blank `SHOPIFY_SCOPES`) is full read+write. Keep the **app config**
+scopes identical:
 
 ```
 read_orders        write_orders
@@ -51,35 +60,65 @@ read_content       write_content
 read_reports
 ```
 
-(Some scopes like `read_customers`/`read_orders` are *protected customer data* — a public app
-distributed via the App Store needs Shopify's protected-data approval; a custom app on your own
-dev store does not.)
+**Protected customer data access (required for Orders *and* Customers).** Any app touching the
+Orders, Customers, Draft Orders, or Fulfillments APIs must enable this in the app config
+(**API access → Protected customer data access → Request access**) and answer the data-protection
+questions. On a **development store it is granted immediately** once configured; full Shopify
+review is only needed to distribute to **live production merchants**. Without it, those scopes
+fail even when granted.
+
+To start minimal (read-only, no protected-data gate), set:
+```
+SHOPIFY_SCOPES=read_orders,read_products,read_inventory,read_fulfillments,read_content,read_reports
+```
+(the data preview only needs `read_orders,read_products`).
 
 ## Part E — `.env` (backend/.env)
 
 ```
-SHOPIFY_API_KEY=your-api-key
-SHOPIFY_API_SECRET=your-api-secret
-SHOPIFY_API_VERSION=2025-01
+SHOPIFY_API_KEY=your-client-id
+SHOPIFY_API_SECRET=your-client-secret
+SHOPIFY_API_VERSION=2025-01      # ⚠ bump to a currently-supported version — see gotchas
 # Blank = the broad read+write default above
 SHOPIFY_SCOPES=
 ```
 
-## Part F — Go live
+## Part F — Live + connect
 
-```bash
-python manage.py set_provider_mode shopify --live    # --mock to revert
-# restart the backend
-```
+Providers are **live by default** — no command needed on a fresh install. (Only if the row is
+mock: `python manage.py set_provider_mode shopify --live`.)
 
 Client portal → **Connect Shopify** → enter the store domain (`your-store.myshopify.com`) →
-approve. The offline token is stored (it does **not** expire).
+approve on Shopify → HMAC-verified callback → offline token stored → developer **Preview data**
+returns `orders`, `products`, `shop_name`, `currency`.
+
+## Who can install (there is no "testers" list)
+
+| Store | Can authorize your unlisted app? |
+|---|---|
+| A **development store** in your Partner account | ✅ Immediately, via OAuth — no review, no allowlist. |
+| A **real / live merchant store** | ❌ Not until you set up distribution (below). |
+
+- **Custom distribution** — for a specific real store. App → **Distribution → Custom** → enter
+  the store's `.myshopify.com` → Shopify gives a one-time install link. **No App Store review.**
+  Caveat: **one store per app, and the choice is permanent.** Best fit for onboarding known
+  clients (recommended for this hub).
+- **Public distribution** — any merchant can install, but requires **App Store review**:
+  typically **~1–2 weeks** for a first response (often several weeks with revisions) **plus**
+  real requirements — mandatory GDPR webhooks (`customers/data_request`, `customers/redact`,
+  `shop/redact`), a full listing, privacy policy, performance criteria. Only pursue this to open
+  the app to the whole Shopify market.
 
 ## Gotchas
 
-- **HTTPS is mandatory** for the redirect — the tunnel is not optional for local testing.
+- **API version:** `2025-01` may be past Shopify's ~12-month support window — set
+  `SHOPIFY_API_VERSION` to a current stable version (check the app's **API versions** page, e.g.
+  `2026-01`), or `fetch_data` calls 400.
+- **Config = env:** scopes in `SHOPIFY_SCOPES` must match the app's **Admin API access scopes**
+  (and be **released**), or the install won't grant them.
 - The offline token dies when the merchant **uninstalls** the app → next test flips the
   connection to `needs_reconnect`.
-- The shop domain **is** the account id; connecting a second store is a separate connection with
-  its own credential.
-- Keep `SHOPIFY_SCOPES` in `.env` in sync with the scopes configured on the Shopify app.
+- The shop domain **is** the account id; a second store is a separate connection + credential.
+- **Token types:** the OAuth flow stores an app **offline token** (`shpat_…`, non-expiring). A
+  store's **custom-app / staff token** (`shpua_…`) also works for Admin REST but is a different
+  token type — fine for validation, not what the vault stores.

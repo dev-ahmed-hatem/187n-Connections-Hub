@@ -96,13 +96,16 @@ Real OAuth adapters for **Google Ads, Meta Ads, Shopify** are implemented
 
 1. Create the provider's OAuth app and put its credentials in `backend/.env`
    (see the per-provider block in `.env.example`).
-2. Flip the provider live (validates config, fails loudly if incomplete):
+2. That's it — providers are **live by default** (`Provider.is_mock` defaults to `False`).
+   The `set_provider_mode` command is optional: use it only to flip a currently-mock row live
+   or to validate that credentials are complete; use `--mock` to run a provider offline.
    ```bash
-   python manage.py set_provider_mode shopify --live     # --mock to revert
+   python manage.py set_provider_mode shopify --live     # optional; --mock to go offline
    ```
 
-Full step-by-step setup (app creation, scopes, redirect URIs, test accounts, and the local
-HTTPS tunnel needed for Shopify) is in **[docs/providers.md](docs/providers.md)**.
+Full step-by-step setup (app creation, scopes, redirect URIs, app roles/distribution, test
+accounts) is in **[docs/providers.md](docs/providers.md)**. Register the redirect URI with the
+`https://` scheme; Shopify needs no tunnel when the backend is already HTTPS.
 
 Mock and live can be mixed per provider while credentials/approvals are pending. The mock
 stays the default from `seed_demo`.

@@ -2,13 +2,27 @@
 
 The Google connector is broad ("Google", not just Ads). Everything below must line up:
 each **scope** you request needs its **API enabled** in the Cloud project *and* the scope
-added to the **OAuth consent screen**, or Google returns `invalid_scope` / 403.
+added to the **OAuth consent screen**.
 
-Redirect URI used by the hub (register it exactly):
+> **Scope granted ≠ API enabled.** These are two independent switches. Consent can succeed and
+> the token can carry a scope, yet a data call still fails **at fetch time** with
+> `403 PERMISSION_DENIED / SERVICE_DISABLED` if that scope's API isn't enabled in the project.
+> (We hit exactly this: Drive worked only after enabling the Drive API; Analytics 403'd until
+> the Analytics Admin + Data APIs were enabled.) Enable every API in Part A for the scopes you
+> keep.
+
+Redirect URI used by the hub — register the **exact, full URL** (scheme included):
 ```
-http://localhost:8000/api/connections/callback
+https://<your-backend-host>/api/connections/callback
+# deployed example: https://hub187.pythonanywhere.com/api/connections/callback
+# local dev:        http://localhost:8000/api/connections/callback
 ```
 (Google allows `http://localhost` for dev — no tunnel needed. In prod use your HTTPS domain.)
+
+> **Include the scheme.** The hub builds this from `BACKEND_BASE_URL`. If that env var is set
+> without `https://` (e.g. `hub187.pythonanywhere.com`), Google receives a scheme-less
+> `redirect_uri` and blocks sign-in with **Error 400: invalid_request**. Always set the full URL:
+> `BACKEND_BASE_URL=https://hub187.pythonanywhere.com`.
 
 ---
 
@@ -105,16 +119,19 @@ https://www.googleapis.com/auth/spreadsheets.readonly
 https://www.googleapis.com/auth/drive.readonly
 ```
 
-## Part F — Go live
+## Part F — Live
+
+Providers are **live by default** (`Provider.is_mock` defaults to `False`), so no command is
+required on a fresh install. Only if a provider row is currently in mock mode:
 
 ```bash
-python manage.py set_provider_mode google-ads --live   # --mock to revert
+python manage.py set_provider_mode google-ads --live   # validates config; --mock to revert
 # restart the backend
 ```
 
-The client portal's **Connect Google** button now opens the real Google consent screen.
-Analytics / Search Console / Merchant data work with just the OAuth token; **Ads** additionally
-needs the developer token.
+The client portal's **Connect Google** button opens the real Google consent screen.
+Analytics / Search Console / Merchant / Drive / Sheets data work with just the OAuth token
+(once each API is enabled); **Ads** additionally needs the developer token.
 
 ## Gotchas
 
@@ -124,4 +141,6 @@ needs the developer token.
 - **Testing mode → refresh tokens expire in 7 days.** Publish to Production for durable tokens.
 - **Sensitive/restricted scopes** (Drive, Analytics, Content, Business Profile) trigger the
   unverified-app warning in testing and require verification for External production use.
-- Each requested scope's **API must be enabled**, or consent fails with `invalid_scope`.
+- Each requested scope's **API must be enabled** — a disabled API doesn't block consent, it
+  fails the **data call** with `403 SERVICE_DISABLED`. Enable the API in Part A per scope.
+- **Redirect must be a full `https://` URL.** A scheme-less `BACKEND_BASE_URL` → `invalid_request`.

@@ -1,115 +1,118 @@
 # Going live with real providers
 
-> Detailed per-provider setup (APIs to enable + exact scope names) lives in
-> [`docs/setup/`](setup/README.md): [Google](setup/google.md) · [Meta](setup/meta.md) ·
+> Detailed per-provider setup (APIs to enable + exact scope names, app roles, distribution)
+> lives in [`docs/setup/`](setup/README.md): [Google](setup/google.md) · [Meta](setup/meta.md) ·
 > [Shopify](setup/shopify.md). This page is the quick reference.
 
-The hub ships with a `MockAdapter` so everything works locally without credentials.
-To connect **real** accounts, create the provider's OAuth app, put its credentials in
-`backend/.env`, then flip the provider live:
+Providers are **live by default** (`Provider.is_mock` defaults to `False`). To connect **real**
+accounts you just create the provider's OAuth app and put its credentials in `backend/.env`.
+The `MockAdapter` still exists as an opt-in escape hatch for offline tests / local debugging.
 
 ```bash
-python manage.py set_provider_mode shopify --live     # or --mock to revert
+# NOT required on a fresh install — providers are already live. Use only to:
+#   - flip a provider row that is currently mock, or
+#   - validate that a provider's credentials are complete (fails loudly if not).
+python manage.py set_provider_mode shopify --live     # or --mock to go offline
 ```
 
-`set_provider_mode ... --live` validates that the required credentials are present and
-fails loudly if any are missing. Each provider is independent — go live one at a time.
-
-**Redirect URI to register in every provider console:**
+**Redirect URI to register in every provider console — full URL, scheme included:**
 
 ```
 ${BACKEND_BASE_URL}/api/connections/callback
-# local default: http://localhost:8000/api/connections/callback
+# deployed example: https://hub187.pythonanywhere.com/api/connections/callback
+# local default:    http://localhost:8000/api/connections/callback
 ```
 
-> **Local HTTPS:** Shopify (and Meta in some cases) require an **HTTPS** redirect. For local
-> testing, run a tunnel (ngrok / cloudflared) and point `BACKEND_BASE_URL` and
-> `FRONTEND_BASE_URL` in `.env` at the tunnel URL. Google allows `http://localhost`.
+> **`BACKEND_BASE_URL` must include the scheme.** If it's set scheme-less
+> (`hub187.pythonanywhere.com`), the hub sends a scheme-less `redirect_uri` and Google/Meta
+> reject sign-in with **Error 400: invalid_request**. Set `BACKEND_BASE_URL=https://…`.
+>
+> **HTTPS:** Shopify (and Meta in some cases) require an HTTPS redirect. A **deployed HTTPS
+> backend needs no tunnel.** Only a **local http** backend needs a tunnel (ngrok / cloudflared)
+> with `BACKEND_BASE_URL`/`FRONTEND_BASE_URL` pointed at it. Google allows `http://localhost`.
 
 ---
 
-## Shopify (needs an HTTPS tunnel for local testing)
+## Shopify (no tunnel needed if the backend is HTTPS)
 
-Shopify **requires an HTTPS redirect**, so local testing needs a tunnel (ngrok/cloudflared).
-
-1. Create a **Shopify Partner** account → **Apps → Create app**.
-2. Run a tunnel (e.g. `cloudflared tunnel --url http://localhost:8000`) and set
-   `BACKEND_BASE_URL` in `.env` to the tunnel URL. Set the app's **Allowed redirection URL** to
-   `<tunnel>/api/connections/callback`.
-3. Copy the **API key** and **API secret key**.
-4. Create a **development store** (Partners → Stores → Add store).
-5. `.env` (leave `SHOPIFY_SCOPES` blank for the broad read+write default):
+1. **partners.shopify.com** → **Apps → Create app → manually**.
+2. **Configuration**: set **App URL**, **Allowed redirection URL** (`<BACKEND_BASE_URL>/api/connections/callback`),
+   and **Admin API access scopes** (same list as `SHOPIFY_SCOPES`) → **Save** → **Release** a version.
+3. Copy **Client ID** / **Client secret**.
+4. **Stores → Add store → Development store** — what you connect/test against.
+5. For Orders/Customers scopes, enable **Protected customer data access** in the app config
+   (instant on a dev store; review needed for live merchants).
+6. `.env` (blank `SHOPIFY_SCOPES` = broad read+write default):
    ```
    SHOPIFY_API_KEY=...
    SHOPIFY_API_SECRET=...
-   SHOPIFY_API_VERSION=2025-01
+   SHOPIFY_API_VERSION=2026-01     # use a currently-supported version
    SHOPIFY_SCOPES=
    ```
-6. `python manage.py set_provider_mode shopify --live`
 7. Client portal → **Connect Shopify** → enter `your-dev-store.myshopify.com` → approve.
 
-Notes: the OAuth callback is **HMAC-verified** with the API secret (forged callbacks are
-rejected → `?error=verification_failed`). The offline access token does **not** expire; the shop
-domain is the account id. On app uninstall the token dies → shows as `needs_reconnect`.
+Notes: callback is **HMAC-verified** (`?error=verification_failed` on mismatch); the offline
+token does **not** expire; shop domain = account id. **Who can install:** dev stores install
+freely (no testers list); a real store needs **Custom distribution** (one store, instant, no
+review) or **Public** (App Store review — weeks + GDPR webhooks).
 
 ---
 
-## Meta Ads (testable on localhost)
+## Meta (testable on localhost)
 
-1. **developers.facebook.com → My Apps → Create App** (type: **Business**).
+1. **developers.facebook.com → My Apps → Create App** → **Other → Business**.
 2. Add **Facebook Login** + **Marketing API** products.
-3. Facebook Login → Settings → **Valid OAuth Redirect URIs**:
-   `http://localhost:8000/api/connections/callback`
-4. Copy **App ID** and **App Secret**. Keep the app in **Development** and add yourself as
-   admin/tester — dev mode reaches your own ad accounts.
-5. `.env` (leave `META_SCOPES` blank for the broad default
-   `ads_read, ads_management, business_management`):
+3. Facebook Login → Settings → **Valid OAuth Redirect URIs**: your full callback URL.
+4. **App Roles → Roles**: add anyone whose assets you'll touch as admin/developer/**tester**
+   and have them accept — dev mode only reaches app-role users' assets.
+5. Copy **App ID** / **App Secret** (Settings → Basic).
+6. `.env` (blank `META_SCOPES` = **ads-only** default; set the full list for pages/IG/catalog):
    ```
    META_APP_ID=...
    META_APP_SECRET=...
    META_API_VERSION=v21.0
-   META_SCOPES=
-   META_CONFIG_ID=        # only for Facebook Login for Business
+   META_SCOPES=          # ads_read,ads_management,business_management,read_insights,pages_show_list,...
+   META_CONFIG_ID=       # only for Facebook Login for Business
    ```
-6. `python manage.py set_provider_mode meta-ads --live`
+7. Quick token: **Tools → Graph API Explorer** → add permissions → Generate. The hub exchanges
+   it for a **long-lived (~60-day)** token on connect.
 
-Notes: no classic refresh token — the short-lived token is exchanged for a **long-lived**
-(~60-day) token, re-exchanged on refresh. `ads_management`/`business_management` on **other
-businesses'** accounts needs **App Review + Business verification** (your own accounts work in
-dev mode). If the app enables "Require app secret," calls also need an `appsecret_proof`.
+Notes: no classic refresh token (long-lived token re-exchanged on refresh — run
+`refresh_connections`/`run_scheduler`). Pages/IG need a Page (and a linked Business/Creator IG).
+Other businesses' accounts need **App Review + Business Verification**.
 
 ---
 
-## Google Ads (most involved — start the developer-token application early)
+## Google (most involved — start the developer-token application early)
 
-1. **Google Cloud Console** → new project → enable the **Google Ads API**.
-2. **APIs & Services → Credentials → Create OAuth client ID** (Web application). Add the
-   hub callback as an authorized redirect URI. Copy **client id/secret**.
-3. In your **Google Ads Manager Account (MCC) → Admin → API Center**, get a
-   **developer token**. Test-account access is immediate; **Basic access** (for real
-   production data) requires an application, usually approved in ~1–2 days — apply early.
-4. Note your MCC **login-customer-id** (10 digits, no dashes).
+1. **Google Cloud Console** → new project → **APIs & Services → Library** → **enable every API**
+   for the scopes you keep (Ads, Analytics Admin + Data, Search Console, Content, Sheets, Drive,
+   Business Profile). *Granting a scope does not enable its API* — a disabled API 403s at fetch
+   time (`SERVICE_DISABLED`).
+2. **OAuth consent screen**: add the scopes; add **test users** (External + Testing); note that
+   sensitive/restricted scopes (Drive, Analytics, Content) need verification for production.
+3. **Credentials → Create OAuth client ID** (Web application) → add the full callback as an
+   authorized redirect URI → copy **client id/secret**.
+4. **Ads only:** get a **developer token** from a **Manager (MCC) account** (Admin → API Center;
+   Basic access ~1–2 days) and note the MCC **login-customer-id** (digits only). Analytics /
+   Search Console / Merchant / Drive / Sheets work **without** the developer token.
 5. `.env`:
    ```
    GOOGLE_ADS_CLIENT_ID=...
    GOOGLE_ADS_CLIENT_SECRET=...
-   GOOGLE_ADS_DEVELOPER_TOKEN=...
-   GOOGLE_ADS_LOGIN_CUSTOMER_ID=1234567890
-   GOOGLE_ADS_API_VERSION=v18
+   GOOGLE_ADS_DEVELOPER_TOKEN=...       # Ads only
+   GOOGLE_ADS_LOGIN_CUSTOMER_ID=1234567890   # Ads only, digits only
+   GOOGLE_ADS_API_VERSION=v21
+   GOOGLE_SCOPES=                        # blank = broad default set
    ```
-6. `python manage.py set_provider_mode google-ads --live`
-
-Notes: for testing without Basic access, create a **test manager + test client account**.
-This phase uses the configured/first accessible customer; a multi-account picker is a
-follow-up.
+6. Client portal → **Connect Google** → real consent screen.
 
 ---
 
-## Reverting to mock
+## Reverting to mock (offline debugging)
 
 ```bash
 python manage.py set_provider_mode <slug> --mock
 ```
 
-Mock and live can be mixed freely (e.g. Shopify live, Google still mock) while credentials
-and approvals are pending.
+Mock and live can be mixed freely while credentials/approvals are pending.

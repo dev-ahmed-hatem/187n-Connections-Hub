@@ -6,6 +6,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
+from access.services import has_access
 from rest_framework.views import APIView
 
 from providers.adapters import get_adapter
@@ -21,12 +23,15 @@ from .services import complete_connection, get_valid_access_token, start_connect
 def resolve_client_org(request):
     """Client users act on their own org; admins/devs pass ?client_org=<id>."""
     user = request.user
-    if user.is_client_role and user.client_org_id:
-        return user.client_org
+    if user.is_client_role:
+        return user.client_org if user.client_org_id else None
     org_id = request.query_params.get('client_org') or request.data.get('client_org')
     if not org_id:
         return None
-    return get_object_or_404(ClientOrg, id=org_id)
+    org = get_object_or_404(ClientOrg, id=org_id)
+    if not has_access(request, org):
+        raise PermissionDenied('Not allowed.')
+    return org
 
 
 @extend_schema(responses=OpenApiTypes.OBJECT)
@@ -69,6 +74,9 @@ class ConnectionStartView(APIView):
         org = resolve_client_org(request)
         if org is None:
             return Response({'detail': 'client_org is required.'}, status=400)
+
+        if not (request.user.is_admin_role or request.user.is_client_role):
+            raise PermissionDenied('Only the client or an admin may authorize accounts.')
 
         provider_ref = request.data.get('provider')
         if not provider_ref:
@@ -125,14 +133,16 @@ class ConnectionTestView(APIView):
     def post(self, request, pk):
         conn = get_object_or_404(Connection.objects.select_related('provider'), id=pk)
         user = request.user
-        if user.is_client_role and conn.client_org_id != user.client_org_id:
+        if not (user.is_client_role and conn.client_org_id == user.client_org_id) and not has_access(request, conn.client_org):
             return Response({'detail': 'Not allowed.'}, status=403)
         try:
             token = get_valid_access_token(conn)
             adapter = get_adapter(conn.provider)
             meta = dict(conn.meta or {})
             meta['external_account_id'] = conn.external_account_id
-            adapter.fetch_data(token, 'stats', {}, meta)
+            data = adapter.fetch_data(token, 'stats', {}, meta)
+            if data.get('mock') or data.get('note') or not data.get('metrics') or data.get('account_id') != conn.external_account_id:
+                return Response({'ok': False, 'status': conn.status, 'detail': 'Authorization alone does not verify audit data.'})
             conn.status = Connection.Status.CONNECTED
             ok = True
         except Exception:
@@ -151,9 +161,8 @@ class ConnectionDeleteView(generics.DestroyAPIView):
     def get_object(self):
         conn = get_object_or_404(Connection, id=self.kwargs['pk'])
         user = self.request.user
-        if user.is_client_role and conn.client_org_id != user.client_org_id:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Not allowed.')
+        if not (user.is_admin_role or (user.is_client_role and conn.client_org_id == user.client_org_id)):
+            raise PermissionDenied('Only the client or an admin may disconnect accounts.')
         return conn
 
 

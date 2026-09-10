@@ -24,6 +24,10 @@ class ApiKeyAuthentication(authentication.BaseAuthentication):
         if len(parts) != 2:
             raise exceptions.AuthenticationFailed('Invalid ApiKey header.')
 
+        # A project key must never inherit its owner's administrative privileges.
+        import re
+        if not re.fullmatch(r'/api/access/clients/[0-9]+/(?:connections|[a-z0-9-]+/(?:data|token))', request.path):
+            raise exceptions.AuthenticationFailed('Project keys are restricted to the data access API.')
         raw = parts[1]
         try:
             consumer = Consumer.objects.select_related('owner').get(

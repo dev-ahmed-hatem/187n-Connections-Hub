@@ -4,7 +4,8 @@ Idempotent. Does NOT create any platform connections — those come from real OA
 """
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 
 from access.models import Consumer
 from portal.models import Announcement, ConnectionRequest, Note
@@ -30,6 +31,8 @@ class Command(BaseCommand):
     help = 'Seed demo users, providers, client orgs, a project and portal content (no connections).'
 
     def handle(self, *args, **options):
+        if not settings.DEBUG or not settings.ALLOW_DEMO_SEED:
+            raise CommandError('Demo seeding requires DEBUG and ALLOW_DEMO_SEED=true in a local environment.')
         providers = {}
         for p in PROVIDERS:
             obj, _ = Provider.objects.update_or_create(
@@ -85,16 +88,6 @@ class Command(BaseCommand):
             status=ConnectionRequest.Status.PENDING)
 
         self.stdout.write(self.style.SUCCESS('Demo data seeded (no connections — connect via OAuth).'))
-        self.stdout.write('Logins (username / password):')
-        self.stdout.write('  admin / admin123        (admin)')
-        self.stdout.write('  dev / dev12345          (developer)')
-        self.stdout.write('  northwind / client123   (client · Northwind Coffee)')
-        self.stdout.write('  lumen / client123       (client · Lumen Skincare)')
-        self.stdout.write('  volt / client123        (client · Volt Fitness)')
-        if raw_key:
-            self.stdout.write(self.style.WARNING(f'Demo Operator API key (shown once): {raw_key}'))
-        else:
-            self.stdout.write('Demo Operator project already existed (API key not reshown).')
 
     def _user(self, username, password, role, client_org=None, superuser=False):
         user, created = User.objects.get_or_create(username=username, defaults={

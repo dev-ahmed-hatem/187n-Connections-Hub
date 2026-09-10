@@ -27,3 +27,21 @@ class AccountTests(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.user.refresh_from_db()
         self.assertEqual(self.user.first_name, 'Neo')
+
+
+class SessionRevocationTests(APITestCase):
+    def test_disabled_demo_cannot_use_access_or_refresh(self):
+        user = User.objects.create_user('demo-principal', password='Original-test!4792', role='admin')
+        tokens = self.client.post('/api/auth/login/', {'username': user.username, 'password': 'Original-test!4792'}, format='json').json()
+        user.is_active = False; user.set_unusable_password(); user.save()
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + tokens['access'])
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 401)
+        self.client.credentials()
+        self.assertEqual(self.client.post('/api/auth/refresh/', {'refresh': tokens['refresh']}, format='json').status_code, 401)
+
+    def test_password_change_invalidates_old_access(self):
+        user = User.objects.create_user('personal-admin', password='Original-test!4792', role='admin')
+        tokens = self.client.post('/api/auth/login/', {'username': user.username, 'password': 'Original-test!4792'}, format='json').json()
+        user.set_password('Changed-test!4792'); user.save()
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + tokens['access'])
+        self.assertEqual(self.client.get('/api/auth/me/').status_code, 401)

@@ -1,3 +1,5 @@
+> September 2026 audit update: consult [the audit rollout guide](../audit-readiness.md) for minimal permissions, production security and current Google Cloud API access. Legacy examples below are not the audit onboarding policy.
+
 # Onboarding real clients before your apps are verified
 
 You can let **real clients** authorize their Meta and Shopify (and Google) accounts **without**

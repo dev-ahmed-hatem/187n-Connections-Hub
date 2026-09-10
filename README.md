@@ -32,11 +32,11 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env             # optional; sensible dev defaults are baked in
 python manage.py migrate
-python manage.py seed_demo       # creates demo users, providers, connections, a grant + API key
+ALLOW_DEMO_SEED=true python manage.py seed_demo  # isolated local demo only
 python manage.py runserver
 ```
 
-`seed_demo` prints the demo logins and a one-time **Demo Operator API key**.
+`seed_demo` requires explicit local opt-in and never prints passwords or API keys.
 
 ### Frontend
 
@@ -46,15 +46,11 @@ npm install
 npm run dev                      # http://localhost:5173  (proxies to http://localhost:8000/api)
 ```
 
-## Demo logins
+## Personal accounts and audit rollout
 
-| Username    | Password    | Role      | Sees                                    |
-|-------------|-------------|-----------|-----------------------------------------|
-| `admin`     | `admin123`  | admin     | grants, clients/users, announcements, audit |
-| `dev`       | `dev12345`  | developer | client access, API keys                 |
-| `northwind` | `client123` | client    | Northwind Coffee's connections & updates |
-| `lumen`     | `client123` | client    | Lumen Skincare (has a "needs reconnect") |
-| `volt`      | `client123` | client    | Volt Fitness (fully connected)          |
+See [the secure audit rollout guide](docs/audit-readiness.md) before attaching real client accounts.
+Public demo principals must be disabled in the backend, not merely hidden on the login page.
+For isolated local demos only, explicitly set `ALLOW_DEMO_SEED=true` with DEBUG enabled.
 
 ## Walk the flow
 

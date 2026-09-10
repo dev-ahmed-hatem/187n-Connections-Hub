@@ -18,6 +18,8 @@ def _normalize_shop(shop: str) -> str:
     shop = (shop or '').strip().lower().replace('https://', '').replace('http://', '').rstrip('/')
     if shop and not shop.endswith('.myshopify.com'):
         shop = f'{shop}.myshopify.com'
+    if shop and not SHOP_RE.fullmatch(shop):
+        raise ValueError("Invalid Shopify shop domain.")
     return shop
 
 
@@ -80,6 +82,9 @@ class ShopifyAdapter(RealAdapter):
         return {'access_token': refresh_token, 'expires_in': NON_EXPIRING_SECONDS}
 
     def fetch_data(self, access_token, resource, params, meta):
+        if resource == 'audit':
+            from .audit import shopify
+            return shopify(self, access_token, params or {}, meta or {})
         shop = (meta or {}).get('shop') or (meta or {}).get('external_account_id')
         version = self.config.get('api_version', '2025-01')
         base = f'https://{shop}/admin/api/{version}'

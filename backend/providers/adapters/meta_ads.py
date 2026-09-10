@@ -82,6 +82,9 @@ class MetaAdsAdapter(RealAdapter):
         }
 
     def fetch_data(self, access_token, resource, params, meta):
+        if resource == 'audit':
+            from .audit import meta_ads
+            return meta_ads(self, access_token, params or {}, meta or {})
         ad_account_id = (meta or {}).get('ad_account_id') or (meta or {}).get('external_account_id')
         insights = self._get(f'{self.graph}/{ad_account_id}/insights', params={
             'fields': 'spend,impressions,clicks,reach',

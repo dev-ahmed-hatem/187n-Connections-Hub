@@ -28,7 +28,7 @@ export default function NotificationsBell() {
   }
 
   const content = (
-    <div style={{ width: 340, maxHeight: 420, overflow: 'auto' }}>
+    <div style={{ width: 'min(340px, calc(100vw - 48px))', maxHeight: 420, overflow: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         marginBottom: 8 }}>
         <Text strong>Notifications</Text>
@@ -42,7 +42,7 @@ export default function NotificationsBell() {
           dataSource={items}
           renderItem={(n) => (
             <List.Item
-              style={{ cursor: 'pointer', background: n.read ? undefined : 'rgba(108,92,231,0.08)',
+              style={{ cursor: 'pointer', background: n.read ? undefined : 'var(--accent-soft)',
                 borderRadius: 8, paddingInline: 8 }}
               onClick={() => onClick(n)}
             >

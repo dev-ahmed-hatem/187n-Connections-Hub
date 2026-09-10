@@ -29,7 +29,7 @@ export default function ProviderIcon({
         display: 'inline-grid',
         placeItems: 'center',
         flex: 'none',
-        background: entry ? '#fff' : provider.color || '#6c5ce7',
+        background: entry ? '#fff' : provider.color || '#e2561f',
         border: entry ? '1px solid rgba(0,0,0,0.08)' : 'none',
         color: '#fff',
         fontWeight: 700,

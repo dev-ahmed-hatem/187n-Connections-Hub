@@ -40,8 +40,9 @@ export default function ProviderConnectionsCard({
   return (
     <Card
       size="small"
+      className="hub-provider-card"
       style={{ height: '100%' }}
-      title={<Space><ProviderIcon provider={p} />{p.name}</Space>}
+      title={<Space><ProviderIcon provider={p} size={34} />{p.name}</Space>}
       extra={
         <Button size="small" type={hasAccounts ? 'default' : 'primary'}
           icon={<PlusOutlined />} loading={connecting} onClick={() => onConnect(p.slug)}>
@@ -56,15 +57,12 @@ export default function ProviderConnectionsCard({
           {item.accounts.map((a: Account) => {
             const s = STATUS[a.status] ?? STATUS.not_connected
             return (
-              <div key={a.connection_id}
-                style={{ display: 'flex', alignItems: 'center', gap: 8,
-                  justifyContent: 'space-between' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden',
-                    textOverflow: 'ellipsis' }}>{a.display_name || a.external_account_id}</div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>{a.external_account_id}</Text>
+              <div key={a.connection_id} className="hub-provider-account">
+                <div className="hub-provider-account-info">
+                  <strong>{a.display_name || a.external_account_id}</strong>
+                  <Text type="secondary">{a.external_account_id}</Text>
                 </div>
-                <Space size={6}>
+                <div className="hub-provider-account-actions">
                   <Tag color={s.color}>{s.label}</Tag>
                   {a.status === 'connected' && (
                     <Button
@@ -88,10 +86,10 @@ export default function ProviderConnectionsCard({
                     okText="Disconnect" okButtonProps={{ danger: true }}
                     onConfirm={() => onDelete(a.connection_id)}
                   >
-                    <Button size="small" danger icon={<DeleteOutlined />}
+                    <Button size="small" danger icon={<DeleteOutlined />} aria-label={`Disconnect ${a.display_name || a.external_account_id}`}
                       loading={deletingId === a.connection_id} />
                   </Popconfirm>
-                </Space>
+                </div>
               </div>
             )
           })}

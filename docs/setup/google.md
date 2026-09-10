@@ -1,3 +1,5 @@
+> September 2026 audit update: consult [the audit rollout guide](../audit-readiness.md) for minimal permissions, production security and current Google Cloud API access. Legacy examples below are not the audit onboarding policy.
+
 # Google — OAuth app setup
 
 The Google connector is broad ("Google", not just Ads). Everything below must line up:

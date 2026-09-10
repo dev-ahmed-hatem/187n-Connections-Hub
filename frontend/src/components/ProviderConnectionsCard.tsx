@@ -7,7 +7,7 @@ import type { Account, ConnectionStatus, ProviderAccounts } from '@/types'
 const { Text } = Typography
 
 const STATUS: Record<ConnectionStatus, { color: string; label: string }> = {
-  connected: { color: 'green', label: 'Connected' },
+  connected: { color: 'blue', label: 'Authorized · audit unverified' },
   needs_reconnect: { color: 'gold', label: 'Needs reconnect' },
   not_connected: { color: 'default', label: 'Not connected' },
   disconnected: { color: 'default', label: 'Disconnected' },

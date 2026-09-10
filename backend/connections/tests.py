@@ -50,10 +50,10 @@ class TestConnectionEndpointTests(TestCase):
         self.api = APIClient()
         self.api.force_authenticate(self.user)
 
-    def test_mock_connection_tests_healthy(self):
+    def test_mock_connection_does_not_prove_real_data(self):
         res = self.api.post(f'/api/connections/{self.conn.id}/test')
         self.assertEqual(res.status_code, 200)
-        self.assertTrue(res.json()['ok'])
+        self.assertFalse(res.json()['ok'])
         self.assertEqual(res.json()['status'], 'connected')
 
 

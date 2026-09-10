@@ -63,11 +63,11 @@ export default function LoginPage() {
 
         <Form layout="vertical" size="large" onFinish={onFinish} requiredMark={false}>
           <Form.Item name="username" label="Username" rules={[{ required: true }]}>
-            <Input autoFocus prefix={<UserOutlined />} placeholder="e.g. admin, dev, northwind" />
+            <Input autoFocus prefix={<UserOutlined />} placeholder="Your personal username" autoComplete="username" />
           </Form.Item>
           <Form.Item name="password" label="Password" rules={[{ required: true }]}
             style={{ marginBottom: 12 }}>
-            <Input.Password prefix={<LockOutlined />} placeholder="••••••••" />
+            <Input.Password autoComplete="current-password" prefix={<LockOutlined />} placeholder="••••••••" />
           </Form.Item>
           {error != null && (
             <Alert type="error" showIcon style={{ marginBottom: 14 }}
@@ -78,14 +78,7 @@ export default function LoginPage() {
           </Button>
         </Form>
 
-        <div style={{
-          marginTop: 20, padding: '10px 12px', borderRadius: 10,
-          background: 'var(--bg-soft)', border: '1px solid var(--line)',
-        }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            <b>Demo logins</b> — admin/admin123 · dev/dev12345 · northwind/client123
-          </Text>
-        </div>
+
       </Card>
     </div>
   )

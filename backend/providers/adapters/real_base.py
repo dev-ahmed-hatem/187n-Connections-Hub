@@ -26,12 +26,17 @@ class RealAdapter(ProviderAdapter):
                 f'Set them in .env, or keep the provider on is_mock=True.'
             )
 
+    def _request(self, method, url, **kwargs):
+        try:
+            resp = method(url, timeout=DEFAULT_TIMEOUT, **kwargs)
+            resp.raise_for_status()
+            return resp.json()
+        except (requests.RequestException, ValueError):
+            # HTTP exceptions may include OAuth secrets in their request URL.
+            raise ValueError('Provider request failed; verify authorization and API configuration.') from None
+
     def _get(self, url, **kwargs):
-        resp = requests.get(url, timeout=DEFAULT_TIMEOUT, **kwargs)
-        resp.raise_for_status()
-        return resp.json()
+        return self._request(requests.get, url, **kwargs)
 
     def _post(self, url, **kwargs):
-        resp = requests.post(url, timeout=DEFAULT_TIMEOUT, **kwargs)
-        resp.raise_for_status()
-        return resp.json()
+        return self._request(requests.post, url, **kwargs)

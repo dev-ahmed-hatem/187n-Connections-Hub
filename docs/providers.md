@@ -1,3 +1,5 @@
+> September 2026 audit update: consult [the audit rollout guide](audit-readiness.md) for minimal permissions, production security and current Google Cloud API access. Legacy examples below are not the audit onboarding policy.
+
 # Going live with real providers
 
 > Detailed per-provider setup (APIs to enable + exact scope names, app roles, distribution)

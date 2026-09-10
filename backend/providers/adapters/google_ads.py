@@ -1,7 +1,7 @@
 """Real Google Ads adapter (REST + GAQL, no SDK).
 
-Standard OAuth2 offline flow (access + refresh token). API calls carry the
-developer token and login-customer-id (MCC) headers.
+Standard OAuth2 offline flow. API access is managed by the OAuth Cloud
+project; manager routing uses login-customer-id when required.
 """
 
 from datetime import date, timedelta
@@ -26,8 +26,7 @@ STATS_GAQL = (
 
 
 class GoogleAdsAdapter(RealAdapter):
-    # developer_token is only needed for Ads API calls (accounts/data), not for
-    # the OAuth handshake — so it's not required just to connect.
+    # API access is managed by the OAuth Cloud project (September 2026).
     required_config = ('client_id', 'client_secret')
 
     def authorize_url(self, state, redirect_uri, params=None):
@@ -53,8 +52,6 @@ class GoogleAdsAdapter(RealAdapter):
             'grant_type': 'authorization_code',
         })
         customer_id = self.config.get('login_customer_id') or ''
-        if not customer_id and self.config.get('developer_token'):
-            customer_id = self._first_customer(tok['access_token'])
         return {
             'refresh_token': tok.get('refresh_token', ''),
             'access_token': tok['access_token'],
@@ -67,26 +64,21 @@ class GoogleAdsAdapter(RealAdapter):
         }
 
     def list_accounts(self, access_token, meta):
-        # No developer token yet → OAuth-only: identify the connection by the
-        # user's Google email so the connect flow is fully testable.
-        if not self.config.get('developer_token'):
-            info = {}
-            try:
-                info = self._userinfo(access_token)
-            except Exception:
-                pass
-            email = info.get('email') or 'Google account'
+        version = self.config.get('api_version', 'v24')
+        try:
+            data = self._get(
+                f'{API_ROOT}/{version}/customers:listAccessibleCustomers',
+                headers={'Authorization': f'Bearer {access_token}'},
+            )
+        except Exception:
+            # GA4 consent can remain usable when Ads access is unavailable.
+            info = self._userinfo(access_token)
             return [{
-                'external_account_id': info.get('sub', '') or (meta or {}).get('external_account_id', ''),
-                'display_name': email,
-                'meta': {'account_name': email, 'email': email, 'pending_developer_token': True},
+                'external_account_id': info.get('sub', ''),
+                'display_name': info.get('email') or 'Google account',
+                'meta': {'account_name': info.get('email') or 'Google account',
+                         'pending_ads_access': True},
             }]
-        version = self.config.get('api_version', 'v21')
-        data = self._get(
-            f'{API_ROOT}/{version}/customers:listAccessibleCustomers',
-            headers={'Authorization': f'Bearer {access_token}',
-                     'developer-token': self.config['developer_token']},
-        )
         out = []
         for name in data.get('resourceNames', []):
             cid = name.split('/')[-1]
@@ -112,8 +104,10 @@ class GoogleAdsAdapter(RealAdapter):
         return {'access_token': tok['access_token'], 'expires_in': int(tok.get('expires_in', 3600))}
 
     def fetch_data(self, access_token, resource, params, meta):
-        """Route the `resource` param to the right Google API (the OAuth token
-        carries the scopes). Discovery-then-fetch: no id → list; id → report."""
+        """Route data reads to the requested Google API."""
+        if resource in ('audit', 'audit-ga4'):
+            from .audit import google
+            return google(self, access_token, params or {}, meta or {}, analytics=resource == 'audit-ga4')
         meta = meta or {}
         params = params or {}
         resource = (resource or 'stats').lower()
@@ -129,23 +123,13 @@ class GoogleAdsAdapter(RealAdapter):
                 'account': self._userinfo(access_token), 'mock': False}
 
     def _ads(self, access_token, meta):
-        if not self.config.get('developer_token'):
-            return {
-                'provider': 'google-ads',
-                'resource': 'stats',
-                'account_id': meta.get('external_account_id'),
-                'metrics': {},
-                'note': 'Connected, but a Google Ads developer token (from a Manager '
-                        'account) is required to pull Ads data.',
-                'mock': False,
-            }
-        customer_id = (meta.get('external_account_id') or '').replace('-', '')
+        from .audit import identifier
+        customer_id = identifier((meta.get('external_account_id') or '').replace('-', ''), r'[0-9]{10}')
         login_customer_id = (meta.get('login_customer_id')
                              or self.config.get('login_customer_id') or customer_id)
-        version = self.config.get('api_version', 'v21')
+        version = self.config.get('api_version', 'v24')
         headers = {
             'Authorization': f'Bearer {access_token}',
-            'developer-token': self.config['developer_token'],
         }
         if login_customer_id:
             headers['login-customer-id'] = str(login_customer_id).replace('-', '')
@@ -237,15 +221,3 @@ class GoogleAdsAdapter(RealAdapter):
     def _userinfo(self, access_token):
         return self._get(USERINFO_ENDPOINT,
                          headers={'Authorization': f'Bearer {access_token}'})
-
-    def _first_customer(self, access_token):
-        version = self.config.get('api_version', 'v21')
-        data = self._get(
-            f'{API_ROOT}/{version}/customers:listAccessibleCustomers',
-            headers={
-                'Authorization': f'Bearer {access_token}',
-                'developer-token': self.config['developer_token'],
-            },
-        )
-        names = data.get('resourceNames', [])
-        return names[0].split('/')[-1] if names else ''

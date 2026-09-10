@@ -218,6 +218,8 @@ class AccessConnectionsView(_AccessBase):
 
     def get(self, request, org_id):
         org = get_object_or_404(ClientOrg, id=org_id)
+        if not has_access(request, org):
+            return Response({'detail': 'No project grants access to this client.'}, status=403)
         by_provider = {}
         for c in Connection.objects.filter(client_org=org).select_related('provider'):
             by_provider.setdefault(c.provider_id, []).append(c)
@@ -255,13 +257,17 @@ class AccessDataView(_AccessBase):
                         meta={'reason': 'account'})
             return err
 
-        access_token = get_valid_access_token(connection)
-        adapter = get_adapter(provider)
         resource = request.query_params.get('resource', 'stats')
-        params = request.query_params.dict()
-        meta = dict(connection.meta or {})
-        meta['external_account_id'] = connection.external_account_id
-        data = adapter.fetch_data(access_token, resource, params, meta)
+        try:
+            access_token = get_valid_access_token(connection)
+            adapter = get_adapter(provider)
+            params = request.query_params.dict()
+            meta = dict(connection.meta or {})
+            meta['external_account_id'] = connection.external_account_id
+            data = adapter.fetch_data(access_token, resource, params, meta)
+        except Exception:
+            write_audit(request, 'data', org, provider, status='error', meta={'resource': resource})
+            return Response({'detail': 'Provider data unavailable. Verify account authorization and API configuration.'}, status=502)
         write_audit(request, 'data', org, provider, meta={'resource': resource})
         return Response(data)
 
@@ -285,6 +291,13 @@ class AccessTokenView(_AccessBase):
                         meta={'reason': 'account'})
             return err
 
+        from .models import Consumer
+        consumer = request.auth if isinstance(request.auth, Consumer) else None
+        allowed = consumer.allow_token_broker if consumer else (
+            request.user.is_admin_role or Consumer.objects.filter(
+                client_org=org, members=request.user, active=True, allow_token_broker=True).exists())
+        if not allowed:
+            return Response({'detail': 'This audit project permits data reads only.'}, status=403)
         access_token = get_valid_access_token(connection)
         write_audit(request, 'token', org, provider)
         payload = {
@@ -305,6 +318,8 @@ class AccessRequestConnectionView(_AccessBase):
 
     def post(self, request, org_id, provider_slug):
         org, provider = self.get_targets(org_id, provider_slug)
+        if not has_access(request, org, provider):
+            return Response({'detail': 'No project grants access to this client.'}, status=403)
         from portal.models import ConnectionRequest, Note
         message = request.data.get('message', '')
         req = ConnectionRequest.objects.create(

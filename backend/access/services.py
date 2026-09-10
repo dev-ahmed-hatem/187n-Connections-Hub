@@ -27,7 +27,7 @@ def has_access(request, org, provider=None) -> bool:
     if user.is_admin_role:
         return True
     if user.is_developer_role:
-        return Consumer.objects.filter(client_org=org, members=user).exists()
+        return Consumer.objects.filter(client_org=org, members=user, active=True).exists()
     return False
 
 

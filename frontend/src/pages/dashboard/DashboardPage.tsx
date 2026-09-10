@@ -1,28 +1,32 @@
-import { Card, Col, Empty, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
-import { Link } from 'react-router-dom'
+import { Alert, Button, Card, Col, Empty, Row, Space, Spin, Statistic, Tag, Typography } from 'antd'
+import { ArrowRightOutlined, ArrowUpOutlined } from '@ant-design/icons'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { useDashboardQuery } from '@/app/api/endpoints/dashboard'
 import { useAppSelector } from '@/app/redux/hooks'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 function StatCard({ label, value, to }: { label: string; value: number; to?: string }) {
-  const body = <Card><Statistic title={label} value={value} /></Card>
+  const body = <Card className="hub-stat-card"><div className="hub-stat-index"><span>WORKSPACE METRIC</span>{to && <ArrowUpOutlined rotate={45} />}</div><Statistic title={label} value={value} /></Card>
   return to ? <Link to={to}>{body}</Link> : body
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  connected: 'green',
+  connected: 'blue',
   needs_reconnect: 'gold',
   disconnected: 'default',
   error: 'red',
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const user = useAppSelector((s) => s.auth.user)
-  const { data, isLoading } = useDashboardQuery()
+  const { data, isLoading, error, refetch } = useDashboardQuery()
 
-  if (isLoading || !data) return <Spin />
+  if (isLoading) return <Spin />
+  if (error || !data) return <Alert type="error" showIcon title="Your overview could not be loaded."
+    action={<Button onClick={() => refetch()}>Try again</Button>} />
   const d = data as Record<string, number | string | object>
 
   const statusChips = (obj: Record<string, number>) =>
@@ -30,7 +34,7 @@ export default function DashboardPage() {
       <Space wrap>
         {Object.entries(obj).map(([k, v]) => (
           <Tag key={k} color={STATUS_COLOR[k] ?? 'default'}>
-            {k.replace('_', ' ')}: {v}
+            {k === 'connected' ? 'Authorized' : k.replaceAll('_', ' ')}: {v}
           </Tag>
         ))}
       </Space>
@@ -40,11 +44,16 @@ export default function DashboardPage() {
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <div>
-        <Title level={3} style={{ marginBottom: 4 }}>
-          Welcome, {user?.username}
-        </Title>
-        <Text type="secondary">Here's your hub at a glance.</Text>
+      <div className="hub-page-intro">
+        <div>
+          <span className="hub-section-number">01 / WORKSPACE OVERVIEW</span>
+          <h1>Your connected<br /><em>operation.</em></h1>
+          <p>Welcome back, {user?.first_name || user?.username}. Your accounts, projects and next steps, all in one place.</p>
+        </div>
+        <Button onClick={() => navigate(data.role === 'admin' ? '/admin/orgs' : data.role === 'developer' ? '/dev/projects' : '/client/connections')}
+          type="primary" icon={<ArrowRightOutlined />} iconPlacement="end">
+            {data.role === 'admin' ? 'Manage clients' : data.role === 'developer' ? 'View projects' : 'Manage connections'}
+        </Button>
       </div>
 
       {data.role === 'admin' && (
@@ -55,17 +64,18 @@ export default function DashboardPage() {
             <Col xs={12} md={6}><StatCard label="Pending requests" value={d.pending_requests as number} to="/admin/approvals" /></Col>
             <Col xs={12} md={6}><StatCard label="Live providers" value={d.providers_live as number} /></Col>
           </Row>
-          <Card title="Connections by status">
+          <Card title="Connection authorizations">
             {statusChips(d.connections_by_status as Record<string, number>)}
           </Card>
           <Card title="Recent activity">
             {(d.recent_audit as { actor: string; action: string; status: string; provider: string; created_at: string }[])?.length ? (
               <Space direction="vertical" style={{ width: '100%' }}>
                 {(d.recent_audit as { actor: string; action: string; status: string; provider: string; created_at: string }[]).map((a, i) => (
-                  <Text key={i}>
+                  <div className="hub-activity-row" key={i}>
                     <Tag color={a.status === 'ok' ? 'green' : a.status === 'denied' ? 'red' : 'volcano'}>{a.status}</Tag>
-                    <b>{a.actor}</b> — {a.action}{a.provider ? ` · ${a.provider}` : ''}
-                  </Text>
+                    <Text><b>{a.actor}</b> · {a.action}{a.provider ? ` / ${a.provider}` : ''}</Text>
+                    <small>{new Date(a.created_at).toLocaleDateString()}</small>
+                  </div>
                 ))}
               </Space>
             ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No activity yet" />}
@@ -87,7 +97,7 @@ export default function DashboardPage() {
             <Col xs={12} md={8}><StatCard label="Open blockers" value={d.open_blockers as number} to="/client/updates" /></Col>
             <Col xs={12} md={8}><StatCard label="Pending requests" value={d.pending_requests as number} to="/client/updates" /></Col>
           </Row>
-          <Card title="Your connections">
+          <Card title="Your connection authorizations">
             {statusChips(d.connections_by_status as Record<string, number>)}
           </Card>
         </>

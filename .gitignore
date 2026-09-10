@@ -9,8 +9,6 @@ venv/
 db/*.sqlite3
 
 # Env / secrets
-.env
-.env.*
 !.env.example
 
 # Node
@@ -19,6 +17,6 @@ dist/
 
 # Editors / OS
 .idea/
-.vscode/
 .DS_Store
 Thumbs.db
+config.bat

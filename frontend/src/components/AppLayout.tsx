@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { Button, Dropdown, Layout, Menu, Tag, Tooltip, Typography, theme } from 'antd'
+import { useState, type ReactNode } from 'react'
+import { Button, Drawer, Dropdown, Grid, Layout, Menu, Tooltip } from 'antd'
 import {
   ApiOutlined,
   BellOutlined,
@@ -12,6 +12,8 @@ import {
   LinkOutlined,
   LogoutOutlined,
   MessageOutlined,
+  MenuOutlined,
+  DownOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
   UserOutlined,
@@ -26,7 +28,6 @@ import NotificationsBell from '@/components/NotificationsBell'
 import type { Role } from '@/types'
 
 const { Header, Sider, Content } = Layout
-const { Text } = Typography
 
 const MENU: Record<Role, { key: string; label: string; icon: ReactNode }[]> = {
   client: [
@@ -50,85 +51,73 @@ const MENU: Record<Role, { key: string; label: string; icon: ReactNode }[]> = {
   ],
 }
 
-const ROLE_COLOR: Record<Role, string> = {
-  client: 'green',
-  developer: 'geekblue',
-  admin: 'purple',
-}
-
 export default function AppLayout({ children }: { children: ReactNode }) {
   const user = useAppSelector((s) => s.auth.user)
   const dark = useAppSelector((s) => s.ui.dark)
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const location = useLocation()
-  const { token } = theme.useToken()
+  const screens = Grid.useBreakpoint()
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  const mobile = !screens.lg
 
   if (!user) return null
   const items = MENU[user.role]
-
+  const currentPage = items.find((item) => item.key === location.pathname)?.label ?? 'Account'
   const onLogout = () => {
     dispatch(logout())
     dispatch(apiSlice.util.resetApiState())
     navigate('/login')
   }
+  const sidebar = (
+    <div className="hub-sidebar-inner">
+      <a className="hub-brand" href="/" onClick={(event) => { event.preventDefault(); navigate('/'); setNavigationOpen(false) }}>
+        <img src="/187n-infinity.png" width="46" height="24" alt="" />
+        <span className="hub-brand-name"><span className="hub-brand-title">187N</span><span className="hub-brand-sub">Connections Hub</span></span>
+      </a>
+      <p className="hub-eyebrow hub-nav-label">Workspace / {user.role}</p>
+      <Menu mode="inline" className="hub-sidebar-menu" selectedKeys={[location.pathname]}
+        items={items} onClick={({ key }) => { navigate(key); setNavigationOpen(false) }} />
+      <div className="hub-workspace-card">
+        <p className="hub-eyebrow">YOUR ORGANIZATION</p>
+        <strong>{user.client_org_name || '187N Operations'}</strong>
+        <small>One workspace. Connected teams.</small>
+      </div>
+      <div className="hub-sidebar-footer"><span>BUILT BY 187N</span><span>↗</span></div>
+    </div>
+  )
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider breakpoint="lg" collapsedWidth="0" width={240}
-        style={{ background: token.colorBgContainer, borderRight: `1px solid ${token.colorBorderSecondary}` }}>
-        <div className="hub-brand">
-          <span className="hub-brand-tile">
-            <img src="/brand-mark.svg" alt="" />
-          </span>
-          <span className="hub-brand-name">
-            <span className="hub-brand-title">187n</span>
-            <span className="hub-brand-sub">Connections Hub</span>
-          </span>
-        </div>
-        <Menu
-          mode="inline"
-          style={{ background: 'transparent', borderInlineEnd: 'none' }}
-          selectedKeys={[location.pathname]}
-          items={items}
-          onClick={({ key }) => navigate(key)}
-        />
-      </Sider>
+    <Layout className="hub-shell">
+      <a className="hub-skip" href="#hub-main">Skip to content</a>
+      {mobile ? (
+        <Drawer className="hub-drawer" title="Navigation" placement="left" size={264}
+          open={navigationOpen} onClose={() => setNavigationOpen(false)}>{sidebar}</Drawer>
+      ) : <Sider width={244} className="hub-sidebar">{sidebar}</Sider>}
       <Layout>
-        <Header className="hub-topbar" style={{
-          borderBottom: `1px solid ${token.colorBorderSecondary}`,
-          display: 'flex', alignItems: 'center', gap: 12, paddingInline: 20 }}>
-          <Tag color={ROLE_COLOR[user.role]} style={{ textTransform: 'capitalize' }}>
-            {user.role}
-          </Tag>
-          {user.client_org_name && <Text type="secondary">{user.client_org_name}</Text>}
-          <div style={{ flex: 1 }} />
-          <NotificationsBell />
-          <Tooltip title={dark ? 'Light mode' : 'Dark mode'}>
-            <Button
-              type="text"
-              aria-label="Toggle theme"
-              icon={dark ? <BulbFilled /> : <BulbOutlined />}
-              onClick={() => dispatch(toggleTheme())}
-            />
-          </Tooltip>
-          <Dropdown
-            trigger={['click']}
-            menu={{
-              items: [
-                { key: 'account', label: 'Account', icon: <UserOutlined /> },
-                { type: 'divider' },
-                { key: 'logout', label: 'Log out', icon: <LogoutOutlined />, danger: true },
-              ],
-              onClick: ({ key }) => (key === 'account' ? navigate('/account') : onLogout()),
-            }}
-          >
-            <Button type="text" icon={<UserOutlined />}>{user.username}</Button>
-          </Dropdown>
+        <Header className="hub-topbar">
+          {mobile && <Button type="text" icon={<MenuOutlined />} aria-label="Open navigation"
+            onClick={() => setNavigationOpen(true)} />}
+          <div className="hub-breadcrumb"><span>Connections Hub</span><span className="hub-breadcrumb-divider">/</span><b>{currentPage}</b></div>
+          <div className="hub-topbar-actions">
+            <NotificationsBell />
+            <Tooltip title={dark ? 'Light mode' : 'Dark mode'}>
+              <Button type="text" aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+                icon={dark ? <BulbFilled /> : <BulbOutlined />} onClick={() => dispatch(toggleTheme())} />
+            </Tooltip>
+            <Dropdown trigger={['click']} menu={{ items: [
+              { key: 'account', label: 'Account', icon: <UserOutlined /> },
+              { type: 'divider' },
+              { key: 'logout', label: 'Log out', icon: <LogoutOutlined />, danger: true },
+            ], onClick: ({ key }) => (key === 'account' ? navigate('/account') : onLogout()) }}>
+              <Button type="text" className="hub-user-button" aria-label="Your account menu">
+                <span className="hub-avatar">{user.username.slice(0, 2).toUpperCase()}</span>
+                <span className="hub-user-name">{user.username}</span><DownOutlined style={{ fontSize: 9 }} />
+              </Button>
+            </Dropdown>
+          </div>
         </Header>
-        <Content style={{ padding: '22px 20px 48px', maxWidth: 1200, width: '100%', margin: '0 auto' }}>
-          {children}
-        </Content>
+        <Content id="hub-main" className="hub-content" tabIndex={-1}>{children}</Content>
       </Layout>
     </Layout>
   )

@@ -6,7 +6,7 @@ interface UiState {
 }
 
 const initialState: UiState = {
-  dark: localStorage.getItem('theme') === 'dark',
+  dark: localStorage.getItem('theme') !== 'light',
 }
 
 const uiSlice = createSlice({

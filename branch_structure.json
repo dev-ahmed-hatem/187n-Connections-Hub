@@ -1,0 +1,18 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "feat/187n-style-production",
+    "fix/audit-access-hardening",
+    "main"
+  ],
+  "parent": {
+    "feat/187n-style-production": "main",
+    "fix/audit-access-hardening": "main",
+    "main": null
+  },
+  "order": [
+    "main",
+    "feat/187n-style-production",
+    "fix/audit-access-hardening"
+  ]
+}

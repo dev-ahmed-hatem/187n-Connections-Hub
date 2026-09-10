@@ -10,7 +10,7 @@ import {
 } from '@/app/api/endpoints/connections'
 import ProviderConnectionsCard from '@/components/ProviderConnectionsCard'
 
-const { Title, Text } = Typography
+
 
 export default function ClientConnectionsPage() {
   const { data, isLoading, refetch } = useOverviewQuery()
@@ -58,9 +58,10 @@ export default function ClientConnectionsPage() {
     setTestingId(connectionId)
     try {
       const res = await testConnection(connectionId).unwrap()
-      res.ok
-        ? message.success('Connection is healthy.')
-        : message.warning('This connection needs reconnecting.')
+      if (res.ok) message.success('Data response received. Full audit verification is separate.')
+      else message.warning('Data could not be verified. Check this connection’s permissions.')
+    } catch {
+      message.error('The connection test could not be completed.')
     } finally {
       setTestingId(null)
     }
@@ -83,12 +84,12 @@ export default function ClientConnectionsPage() {
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <div>
-        <Title level={3} style={{ marginBottom: 4 }}>Your connections</Title>
-        <Text type="secondary">
-          Connect each platform once — you can add several accounts per platform. We keep the
-          connection alive so your operators can use it.
-        </Text>
+      <div className="hub-page-intro">
+        <div>
+          <span className="hub-section-number">02 / YOUR CONNECTIONS</span>
+          <h1>Bring it<br /><em>together.</em></h1>
+          <p>Connect your business accounts once. Choose what to share and give your team the access they need.</p>
+        </div>
       </div>
 
       {needsReconnect.length > 0 && (
@@ -97,11 +98,11 @@ export default function ClientConnectionsPage() {
           description={`Please reconnect: ${[...new Set(needsReconnect)].join(', ')}.`} />
       )}
 
-      <Space size="large" wrap>
-        <span><Tag color="green">Connected</Tag> ready to use</span>
-        <span><Tag color="gold">Needs reconnect</Tag> please re-approve</span>
-        <span><Tag>Not connected</Tag> connect to enable</span>
-      </Space>
+      <div className="hub-connections-legend">
+        <span><Tag color="blue">Authorized</Tag> data verification is separate</span>
+        <span><Tag color="gold">Needs reconnect</Tag> re-approve access</span>
+        <span><Tag>Not connected</Tag> awaiting your permission</span>
+      </div>
 
       {isLoading ? (
         <Spin />

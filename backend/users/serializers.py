@@ -1,3 +1,4 @@
+from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
@@ -33,6 +34,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name',
             'role', 'client_org', 'password',
         ]
+
+    def validate(self, attrs):
+        validate_password(attrs["password"], User(**{k: v for k, v in attrs.items() if k != "password"}))
+        return attrs
 
     def create(self, validated_data):
         password = validated_data.pop('password')

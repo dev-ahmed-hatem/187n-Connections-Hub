@@ -32,6 +32,7 @@ SECRET_KEY = env(
 )
 
 DEBUG = env_bool('DJANGO_DEBUG', True)
+ALLOW_DEMO_SEED = DEBUG and env_bool('ALLOW_DEMO_SEED', False)
 
 ALLOWED_HOSTS = [h for h in env('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h]
 
@@ -169,12 +170,14 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(env('JWT_ACCESS_MINUTES', '60'))),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=int(env('JWT_REFRESH_DAYS', '7'))),
     'AUTH_HEADER_TYPES': ('Bearer',),
+    'CHECK_REVOKE_TOKEN': True,
 }
 
 
 # CORS (dev: allow the Vite dev server)
 CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL', True)
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in env('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
 
 # Base URL the backend uses to build OAuth redirect URIs back to itself.
 BACKEND_BASE_URL = env('BACKEND_BASE_URL', 'http://localhost:8000')
@@ -186,39 +189,16 @@ def _csv(key, default=''):
     return [s.strip() for s in env(key, default).split(',') if s.strip()]
 
 
-# Broad, config-driven Google scopes. Override with the GOOGLE_SCOPES env var
-# (comma-separated) to match exactly the APIs you've enabled + added to the
-# OAuth consent screen. Each scope's API must be enabled in the Cloud project.
+# Minimal audit defaults. Existing explicit environment scopes are preserved.
+# Google Ads has no read-only OAuth scope: use a read-only account role and
+# the audit project's data proxy (token brokering disabled).
 DEFAULT_GOOGLE_SCOPES = [
-    'openid',
-    'email',
-    'profile',
+    'openid', 'email', 'profile',
     'https://www.googleapis.com/auth/adwords',
     'https://www.googleapis.com/auth/analytics.readonly',
-    'https://www.googleapis.com/auth/webmasters.readonly',
-    'https://www.googleapis.com/auth/content',
-    'https://www.googleapis.com/auth/business.manage',
-    'https://www.googleapis.com/auth/spreadsheets.readonly',
-    'https://www.googleapis.com/auth/drive.readonly',
 ]
-
-# Meta: read + act on ad accounts. ads_management/business_management need App
-# Review for other businesses (dev mode covers your own accounts).
-DEFAULT_META_SCOPES = ['ads_read', 'ads_management', 'business_management']
-
-# Shopify: broad read + write across the common commerce resources.
-DEFAULT_SHOPIFY_SCOPES = [
-    'read_orders', 'write_orders',
-    'read_products', 'write_products',
-    'read_customers', 'write_customers',
-    'read_inventory', 'write_inventory',
-    'read_fulfillments', 'write_fulfillments',
-    'read_discounts', 'write_discounts',
-    'read_price_rules', 'write_price_rules',
-    'read_draft_orders', 'write_draft_orders',
-    'read_content', 'write_content',
-    'read_reports',
-]
+DEFAULT_META_SCOPES = ['ads_read']
+DEFAULT_SHOPIFY_SCOPES = ['read_orders', 'read_products']
 
 # Real-provider OAuth/API configuration (used only when Provider.is_mock is False).
 # Missing values are fine while a provider stays on the mock adapter.
@@ -228,7 +208,7 @@ PROVIDER_CONFIG = {
         'client_secret': env('GOOGLE_ADS_CLIENT_SECRET', ''),
         'developer_token': env('GOOGLE_ADS_DEVELOPER_TOKEN', ''),
         'login_customer_id': env('GOOGLE_ADS_LOGIN_CUSTOMER_ID', ''),
-        'api_version': env('GOOGLE_ADS_API_VERSION', 'v21'),
+        'api_version': env('GOOGLE_ADS_API_VERSION', 'v24'),
         'scopes': _csv('GOOGLE_SCOPES') or DEFAULT_GOOGLE_SCOPES,
     },
     'meta-ads': {
@@ -241,7 +221,7 @@ PROVIDER_CONFIG = {
     'shopify': {
         'client_id': env('SHOPIFY_API_KEY', ''),
         'client_secret': env('SHOPIFY_API_SECRET', ''),
-        'api_version': env('SHOPIFY_API_VERSION', '2025-01'),
+        'api_version': env('SHOPIFY_API_VERSION', '2026-07'),
         'scopes': _csv('SHOPIFY_SCOPES') or DEFAULT_SHOPIFY_SCOPES,
     },
 }

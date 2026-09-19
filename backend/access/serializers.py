@@ -13,9 +13,9 @@ class ConsumerSerializer(serializers.ModelSerializer):
         model = Consumer
         fields = [
             'id', 'name', 'client_org', 'client_org_name', 'members', 'member_usernames',
-            'api_key_prefix', 'active', 'created_at',
+            'api_key_prefix', 'active', 'allow_token_broker', 'created_at',
         ]
-        read_only_fields = ['api_key_prefix', 'created_at']
+        read_only_fields = ['api_key_prefix', 'allow_token_broker', 'created_at']
 
     def get_member_usernames(self, obj):
         return [u.username for u in obj.members.all()]

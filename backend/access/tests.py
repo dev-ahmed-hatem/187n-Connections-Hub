@@ -123,3 +123,43 @@ class ProjectRequestTests(APITestCase):
         self.client.force_authenticate(self.dev)
         res = self.client.post(f'/api/access/project-requests/{req.id}/approve/')
         self.assertEqual(res.status_code, 403)
+
+
+class AuditIsolationTests(ApiKeyAccessTests):
+    def test_admin_owned_key_cannot_manage_users_or_connections(self):
+        self._auth()
+        self.assertEqual(self.client.get('/api/users/accounts/').status_code, 401)
+        self.assertEqual(self.client.post('/api/connections/start/', {}).status_code, 401)
+
+    def test_other_client_discovery_is_denied(self):
+        self._auth()
+        self.assertEqual(self.client.get(f'/api/access/clients/{self.other.pk}/connections').status_code, 403)
+
+    def test_audit_project_cannot_broker_token(self):
+        self.project.allow_token_broker = False
+        self.project.save()
+        self._auth()
+        self.assertEqual(self.client.post(f'/api/access/clients/{self.org.pk}/google-ads/token').status_code, 403)
+        self.assertEqual(self.client.get(self.data_url(self.org)).status_code, 200)
+
+    def test_inactive_project_member_and_unassigned_developer_denied(self):
+        dev = User.objects.create_user('personal-dev', role='developer')
+        self.project.members.add(dev)
+        self.project.active = False
+        self.project.save()
+        self.client.force_authenticate(dev)
+        self.assertEqual(self.client.get(self.data_url(self.org)).status_code, 403)
+        conn = Connection.objects.get(client_org=self.org)
+        self.assertEqual(self.client.post(f'/api/connections/{conn.pk}/test').status_code, 403)
+        self.assertEqual(self.client.delete(f'/api/connections/{conn.pk}/').status_code, 403)
+
+    def test_audit_developer_can_read_but_cannot_disconnect(self):
+        dev = User.objects.create_user('audit-dev', role='developer')
+        self.project.members.add(dev)
+        self.project.allow_token_broker = False
+        self.project.save()
+        self.client.force_authenticate(dev)
+        self.assertEqual(self.client.get(self.data_url(self.org)).status_code, 200)
+        conn = Connection.objects.get(client_org=self.org)
+        self.assertEqual(self.client.delete(f'/api/connections/{conn.pk}/').status_code, 403)
+        self.assertEqual(self.client.post(f'/api/access/clients/{self.org.pk}/google-ads/token').status_code, 403)

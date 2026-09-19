@@ -34,6 +34,7 @@ class Consumer(models.Model):
     api_key_hash = models.CharField(max_length=64, unique=True)
     api_key_prefix = models.CharField(max_length=16, blank=True)
     active = models.BooleanField(default=True)
+    allow_token_broker = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
